@@ -33,11 +33,10 @@ type CallParams struct {
 	AgentID   string                 `json:"agent_id,omitempty"`
 }
 
-// Configuration constants
 const (
-	tokenLimitPerAgent  = 10000        // Soft limit (warning only)
-	rateLimitPerMin     = 60           // Max requests per minute per agent
-	tokenResetWindow    = 24 * time.Hour // Daily token reset
+	tokenLimitPerAgent = 10000
+	rateLimitPerMin    = 60
+	tokenResetWindow   = 24 * time.Hour
 )
 
 var agentState = internal.NewAgentState()
@@ -85,20 +84,17 @@ func handleCallTool(id int, paramsRaw json.RawMessage, registry *skills.Registry
 		return
 	}
 
-	// Extract or assign agent ID
 	agentID := params.AgentID
 	if agentID == "" {
 		agentID = "anonymous"
 	}
 
-	// Step 1: Rate limiting
 	if !agentState.RateLimit(agentID, rateLimitPerMin) {
 		sendError(id, -32003, "rate limit exceeded")
 		internal.Audit(agentID, "rate_limited", "tools/call")
 		return
 	}
 
-	// Step 2: Find the skill
 	skill := registry.Get(params.Name)
 	if skill == nil {
 		sendError(id, -32001, "Tool not found")
@@ -106,7 +102,6 @@ func handleCallTool(id int, paramsRaw json.RawMessage, registry *skills.Registry
 		return
 	}
 
-	// Step 3: Execute the skill
 	output, err := skill.Execute(params.Arguments)
 	if err != nil {
 		sendError(id, -32002, err.Error())
@@ -114,39 +109,32 @@ func handleCallTool(id int, paramsRaw json.RawMessage, registry *skills.Registry
 		return
 	}
 
-	// Step 4: Calculate token usage (1 token per 4 characters of output)
 	tokensUsed := len(output.Text) / 4
 	if tokensUsed < 1 {
 		tokensUsed = 1
 	}
 
-	// Step 5: Update agent usage stats
 	agentState.AddUsage(agentID, tokensUsed)
 	agentState.ResetIfNeeded(agentID, tokenResetWindow)
 
-	// Step 6: Check budget (soft warning only—not blocking)
 	currentUsage := agentState.GetUsage(agentID)
 	if currentUsage > tokenLimitPerAgent {
-		internal.Audit(agentID, "budget_warning", 
-			fmt.Sprintf("exceeded soft limit: %d/%d tokens", currentUsage, tokenLimitPerAgent))
+		internal.Audit(agentID, "budget_warning", fmt.Sprintf("exceeded soft limit: %d/%d tokens", currentUsage, tokenLimitPerAgent))
 	}
 
-	// Step 7: Audit the successful call
-	internal.Audit(agentID, "tools.call", 
-		fmt.Sprintf("skill=%s tokens=%d total=%d", params.Name, tokensUsed, currentUsage))
+	internal.Audit(agentID, "tools.call", fmt.Sprintf("skill=%s tokens=%d total=%d", params.Name, tokensUsed, currentUsage))
 
-	// Step 8: Return success response
 	sendResult(id, map[string]interface{}{
 		"content": []map[string]string{
 			{"type": "text", "text": output.Text},
 		},
 		"structured_output": output.Structured,
 		"metadata": map[string]interface{}{
-			"agent_id":       agentID,
-			"tokens_used":    tokensUsed,
-			"total_tokens":   currentUsage,
-			"rate_limit":     rateLimitPerMin,
-			"token_limit":    tokenLimitPerAgent,
+			"agent_id":     agentID,
+			"tokens_used":  tokensUsed,
+			"total_tokens": currentUsage,
+			"rate_limit":   rateLimitPerMin,
+			"token_limit":  tokenLimitPerAgent,
 		},
 	})
 }
