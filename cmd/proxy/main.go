@@ -183,10 +183,8 @@ func min(a, b int) int {
 	}
 	return b
 }
-
 func main() {
 	http.HandleFunc("/v1/analyze", analyzeHandler)
 	http.HandleFunc("/v1/submit", submitHandler)
-	log.Printf("Proxy listening on 0.0.0.0:8080")
 	log.Fatal(http.ListenAndServe("0.0.0.0:8080", nil))
 }
