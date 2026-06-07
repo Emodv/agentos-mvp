@@ -12,6 +12,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.21'
+      - name: Tidy Go modules
+        run: go mod tidy
       - name: Build
         run: make build
       - name: Upload binaries
