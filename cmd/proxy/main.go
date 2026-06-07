@@ -14,7 +14,6 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 )
-
 type AnalyzeResponse struct {
 	URL        string      `json:"url"`
 	Forms      []Form      `json:"forms"`
