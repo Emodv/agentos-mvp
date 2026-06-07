@@ -1,15 +1,16 @@
 app = "agentos-mvp"
 
 [build]
-  [build.args]
-    GO_VERSION = "1.21"
 
-[env]
-  PORT = "8080"
-
-[http_service]
+[[services]]
   internal_port = 8080
-  force_https = true
-  auto_stop_machines = true
-  auto_start_machines = true
-  min_machines_running = 0
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
