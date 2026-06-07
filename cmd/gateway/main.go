@@ -1,4 +1,4 @@
-// Agent OS MVP - MCP Gateway with Agent Tracking
+// Agent OS MVP - MCP Gateway with Full Agent Tracking
 // Co-Founder & Author: Emodv
 
 package main
@@ -34,9 +34,14 @@ type CallParams struct {
 	AgentID   string                 `json:"agent_id,omitempty"`
 }
 
+// Configuration constants
+const (
+	tokenLimitPerAgent  = 10000        // Soft limit (warning only)
+	rateLimitPerMin     = 60           // Max requests per minute per agent
+	tokenResetWindow    = 24 * time.Hour // Daily token reset
+)
+
 var agentState = internal.NewAgentState()
-const tokenLimitPerAgent = 10000   // soft limit
-const rateLimitPerMin = 60
 
 func main() {
 	scanner := bufio.NewScanner(os.Stdin)
@@ -81,25 +86,28 @@ func handleCallTool(id int, paramsRaw json.RawMessage, registry *skills.Registry
 		return
 	}
 
+	// Extract or assign agent ID
 	agentID := params.AgentID
 	if agentID == "" {
 		agentID = "anonymous"
 	}
 
-	// Rate limiting
+	// Step 1: Rate limiting
 	if !agentState.RateLimit(agentID, rateLimitPerMin) {
 		sendError(id, -32003, "rate limit exceeded")
 		internal.Audit(agentID, "rate_limited", "tools/call")
 		return
 	}
 
+	// Step 2: Find the skill
 	skill := registry.Get(params.Name)
 	if skill == nil {
 		sendError(id, -32001, "Tool not found")
+		internal.Audit(agentID, "tool_not_found", params.Name)
 		return
 	}
 
-	// Execute skill
+	// Step 3: Execute the skill
 	output, err := skill.Execute(params.Arguments)
 	if err != nil {
 		sendError(id, -32002, err.Error())
@@ -107,23 +115,40 @@ func handleCallTool(id int, paramsRaw json.RawMessage, registry *skills.Registry
 		return
 	}
 
-	// Estimate tokens used (rough: 1 token per 4 chars of output text)
+	// Step 4: Calculate token usage (1 token per 4 characters of output)
 	tokensUsed := len(output.Text) / 4
-	agentState.AddUsage(agentID, tokensUsed)
-	agentState.ResetIfNeeded(agentID, 24*time.Hour) // daily reset
-
-	// Soft budget warning
-	if agentState.GetUsage(agentID) > tokenLimitPerAgent {
-		internal.Audit(agentID, "budget_warning", fmt.Sprintf("used %d tokens", agentState.GetUsage(agentID)))
+	if tokensUsed < 1 {
+		tokensUsed = 1
 	}
 
-	internal.Audit(agentID, "tools.call", params.Name)
+	// Step 5: Update agent usage stats
+	agentState.AddUsage(agentID, tokensUsed)
+	agentState.ResetIfNeeded(agentID, tokenResetWindow)
 
+	// Step 6: Check budget (soft warning only—not blocking)
+	currentUsage := agentState.GetUsage(agentID)
+	if currentUsage > tokenLimitPerAgent {
+		internal.Audit(agentID, "budget_warning", 
+			fmt.Sprintf("exceeded soft limit: %d/%d tokens", currentUsage, tokenLimitPerAgent))
+	}
+
+	// Step 7: Audit the successful call
+	internal.Audit(agentID, "tools.call", 
+		fmt.Sprintf("skill=%s tokens=%d total=%d", params.Name, tokensUsed, currentUsage))
+
+	// Step 8: Return success response
 	sendResult(id, map[string]interface{}{
 		"content": []map[string]string{
 			{"type": "text", "text": output.Text},
 		},
 		"structured_output": output.Structured,
+		"metadata": map[string]interface{}{
+			"agent_id":       agentID,
+			"tokens_used":    tokensUsed,
+			"total_tokens":   currentUsage,
+			"rate_limit":     rateLimitPerMin,
+			"token_limit":    tokenLimitPerAgent,
+		},
 	})
 }
 
