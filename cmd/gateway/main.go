@@ -1,5 +1,5 @@
-// Agent OS MVP - MCP Gateway
-// Co-Founder & Author: Emodv (https://github.com/Emodv)
+// Agent OS MVP - MCP Gateway with Agent Tracking
+// Co-Founder & Author: Emodv
 
 package main
 
@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/Emodv/agentos-mvp/internal"
 	"github.com/Emodv/agentos-mvp/skills"
 )
 
@@ -29,7 +31,12 @@ type Tool struct {
 type CallParams struct {
 	Name      string                 `json:"name"`
 	Arguments map[string]interface{} `json:"arguments"`
+	AgentID   string                 `json:"agent_id,omitempty"`
 }
+
+var agentState = internal.NewAgentState()
+const tokenLimitPerAgent = 10000   // soft limit
+const rateLimitPerMin = 60
 
 func main() {
 	scanner := bufio.NewScanner(os.Stdin)
@@ -73,16 +80,45 @@ func handleCallTool(id int, paramsRaw json.RawMessage, registry *skills.Registry
 		sendError(id, -32602, "Invalid params")
 		return
 	}
+
+	agentID := params.AgentID
+	if agentID == "" {
+		agentID = "anonymous"
+	}
+
+	// Rate limiting
+	if !agentState.RateLimit(agentID, rateLimitPerMin) {
+		sendError(id, -32003, "rate limit exceeded")
+		internal.Audit(agentID, "rate_limited", "tools/call")
+		return
+	}
+
 	skill := registry.Get(params.Name)
 	if skill == nil {
 		sendError(id, -32001, "Tool not found")
 		return
 	}
+
+	// Execute skill
 	output, err := skill.Execute(params.Arguments)
 	if err != nil {
 		sendError(id, -32002, err.Error())
+		internal.Audit(agentID, "tool_error", params.Name+": "+err.Error())
 		return
 	}
+
+	// Estimate tokens used (rough: 1 token per 4 chars of output text)
+	tokensUsed := len(output.Text) / 4
+	agentState.AddUsage(agentID, tokensUsed)
+	agentState.ResetIfNeeded(agentID, 24*time.Hour) // daily reset
+
+	// Soft budget warning
+	if agentState.GetUsage(agentID) > tokenLimitPerAgent {
+		internal.Audit(agentID, "budget_warning", fmt.Sprintf("used %d tokens", agentState.GetUsage(agentID)))
+	}
+
+	internal.Audit(agentID, "tools.call", params.Name)
+
 	sendResult(id, map[string]interface{}{
 		"content": []map[string]string{
 			{"type": "text", "text": output.Text},
