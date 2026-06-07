@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -186,6 +187,6 @@ func min(a, b int) int {
 func main() {
 	http.HandleFunc("/v1/analyze", analyzeHandler)
 	http.HandleFunc("/v1/submit", submitHandler)
-	println("Proxy listening on :8080")
-	http.ListenAndServe(":8080", nil)
+	log.Printf("Proxy listening on 0.0.0.0:8080")
+	log.Fatal(http.ListenAndServe("0.0.0.0:8080", nil))
 }
