@@ -11,4 +11,4 @@ WORKDIR /root/
 COPY --from=builder /app/bin/gateway .
 COPY --from=builder /app/bin/proxy .
 EXPOSE 8080
-CMD ["./proxy"]
+CMD ["./proxy"].
