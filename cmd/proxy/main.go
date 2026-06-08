@@ -4,15 +4,15 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"net/url"
-	"strings"
+    "encoding/json"
+    "fmt"
+    "io"
+    "log"
+    "net/http"
+    "net/url"
+    "strings"
 
-	"github.com/PuerkitoBio/goquery"
+    "github.com/PuerkitoBio/goquery"
 )
 type AnalyzeResponse struct {
 	URL        string      `json:"url"`
