@@ -4,16 +4,17 @@
 package main
 
 import (
-    "encoding/json"
-    "fmt"
-    "io"
-    "log"
-    "net/http"
-    "net/url"
-    "strings"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"net/url"
+	"strings"
 
-    "github.com/PuerkitoBio/goquery"
+	"github.com/PuerkitoBio/goquery"
 )
+
 type AnalyzeResponse struct {
 	URL        string      `json:"url"`
 	Forms      []Form      `json:"forms"`
@@ -182,8 +183,17 @@ func min(a, b int) int {
 	}
 	return b
 }
+
 func main() {
+	// Health check endpoint required by Fly.io
+	http.HandleFunc("/flycheck", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// Agent OS proxy endpoints
 	http.HandleFunc("/v1/analyze", analyzeHandler)
 	http.HandleFunc("/v1/submit", submitHandler)
+
+	log.Printf("Proxy listening on 0.0.0.0:8080")
 	log.Fatal(http.ListenAndServe("0.0.0.0:8080", nil))
 }
