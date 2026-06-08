@@ -58,8 +58,6 @@ type SubmitResponse struct {
 	TokensSaved int       `json:"tokens_saved"`
 }
 
-// ── Middleware ────────────────────────────────────────────
-
 func apiKeyMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		apiKey := os.Getenv("L2AGENT_API_KEY")
@@ -93,8 +91,6 @@ func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// ── Handlers ──────────────────────────────────────────────
-
 func analyzeHandler(w http.ResponseWriter, r *http.Request) {
 	rawURL := r.URL.Query().Get("url")
 	agentID := r.Header.Get("X-Agent-ID")
@@ -109,7 +105,6 @@ func analyzeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"invalid url"}`, http.StatusBadRequest)
 		return
 	}
-
 	resp, err := http.Get(rawURL)
 	if err != nil {
 		http.Error(w, fmt.Sprintf(`{"error":"failed to fetch: %s"}`, err), http.StatusBadGateway)
@@ -171,12 +166,10 @@ func submitHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"url required"}`, http.StatusBadRequest)
 		return
 	}
-
 	formData := url.Values{}
 	for k, v := range req.Fields {
 		formData.Set(k, v)
 	}
-
 	resp, err := http.PostForm(req.URL, formData)
 	if err != nil {
 		http.Error(w, fmt.Sprintf(`{"error":"submit failed: %s"}`, err), http.StatusBadGateway)
@@ -202,20 +195,17 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ── Main ──────────────────────────────────────────────────
-
 func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
-
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", corsMiddleware(healthHandler))
 	mux.HandleFunc("/v1/analyze", corsMiddleware(apiKeyMiddleware(analyzeHandler)))
 	mux.HandleFunc("/v1/submit", corsMiddleware(apiKeyMiddleware(submitHandler)))
 
-	log.Printf("L2Agent Proxy v0.2.0 running on :%s", port)
+	log.Printf("L2Agent Proxy v0.2.0 on :%s", port)
 	log.Printf("Dev mode: %v", os.Getenv("L2AGENT_API_KEY") == "")
 
 	if err := http.ListenAndServe(":"+port, mux); err != nil {
