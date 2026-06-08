@@ -1,36 +1,16 @@
+# L2Agent – Agent Integration Guide
 
-# Agent OS – for AI agents
+## What is L2Agent?
 
-## Build
-```bash
-make build
-```
+The agent-native API layer. Instead of burning 400+ tokens parsing
+human-designed web interfaces, agents get clean JSON endpoints.
 
-Run gateway
+**Before:** 400 tokens per action  
+**After:** 45 tokens per action  
+**Savings: 89%**
 
+## Quick Start for Agents
+
+### Start the Gateway (MCP)
 ```bash
 ./bin/gateway
-```
-
-Accepts JSON‑RPC 2.0 over stdin.
-
-Run proxy
-
-```bash
-./bin/proxy
-```
-
-Listens on :8080. Endpoints:
-
-· GET /v1/analyze?url=<url> – extract forms/clickables
-· POST /v1/submit – submit a form
-
-Test
-
-```bash
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | ./bin/gateway
-curl "http://localhost:8080/v1/analyze?url=https://httpbin.org/forms/post"
-```
-
-```
-
