@@ -1,29 +1,27 @@
-# Agent OS MVP
+# L2Agent
 
-**Co-Founder & Author: [Emodv](https://github.com/Emodv)**
+**The agent-native API layer. Cheaper. Faster. More reliable.**
 
-Universal platform for AI agents: MCP gateway + HTML proxy with **agent tracking, rate limiting, token budgeting, and audit logging**.
+> Like Optimism for blockchain — L2Agent eliminates the token tax 
+> AI agents pay navigating human-designed web interfaces.
 
-## Features
+## The Problem
 
-- **MCP Gateway** - JSON-RPC over stdin, skill discovery and execution
-- **HTML-to-API Proxy** - Turn any website into structured API endpoints
-- **Agent ID Tracking** - Every call is attributed to a specific agent
-- **Rate Limiting** - 60 requests/minute per agent (prevents abuse)
-- **Token Budgeting** - Track usage per agent (1 token ≈ 4 chars of output)
-- **Audit Logging** - Complete action history for debugging and billing
-- **Daily Token Reset** - Automatic reset after 24 hours
+When an AI agent hits a legacy website today:
+- Parses HTML: ~150 tokens
+- Navigates UI elements: ~100 tokens  
+- Handles forms/auth: ~150 tokens
+- **Total: 400+ tokens per action**
 
-## Quick Start
+Most of that is waste. Built for humans, not agents.
 
-```bash
-# Clone and build
-git clone https://github.com/Emodv/agentos-mvp
-cd agentos-mvp
-make build
+## The Solution
 
-# Terminal 1: Start the proxy
-./bin/proxy
+L2Agent sits between your AI agent and any web system.
+Agents get clean, structured JSON endpoints instead of raw HTML.
 
-# Terminal 2: Start the gateway
-./bin/gateway
+- **Before L2Agent:** 400 tokens per action
+- **After L2Agent:** 50 tokens per action
+- **Savings: 87%**
+
+## How It Works
