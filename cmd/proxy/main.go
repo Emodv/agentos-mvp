@@ -89,7 +89,11 @@ func analyzeHandler(w http.ResponseWriter, r *http.Request) {
 	clickables := []Clickable{}
 	doc.Find("button, a.btn, input[type=submit]").Each(func(i int, s *goquery.Selection) {
 		text := strings.TrimSpace(s.Text())
-		selector, _ := goquery.SelectorToCSS(s)
+		// Create a simple selector: use text if not empty, else fallback to the element's node name
+		selector := text
+		if selector == "" {
+			selector = s.Get(0).Data // tag name, e.g., "button"
+		}
 		typ := "button"
 		if s.Is("a") {
 			typ = "link"
