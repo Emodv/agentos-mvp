@@ -1,14 +1,26 @@
 FROM golang:1.21-alpine AS builder
+
 WORKDIR /app
-COPY go.mod go.sum ./
+
+COPY go.mod ./
+COPY go.sum ./
+
 RUN go mod download
+
 COPY . .
-RUN go build -o bin/gateway ./cmd/gateway
-RUN go build -o bin/proxy ./cmd/proxy
+
+RUN go build -o /proxy ./cmd/proxy
+RUN go build -o /gateway ./cmd/gateway
 
 FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates
+
 WORKDIR /root/
-COPY --from=builder /app/bin/gateway .
-COPY --from=builder /app/bin/proxy .
+
+COPY --from=builder /proxy .
+COPY --from=builder /gateway .
+
 EXPOSE 8080
-CMD ["./proxy"].
+
+CMD ["./proxy"]
