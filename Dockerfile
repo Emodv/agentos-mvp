@@ -2,12 +2,15 @@ FROM golang:1.21-alpine AS builder
 
 WORKDIR /app
 
-COPY go.mod ./
-COPY go.sum ./
+RUN apk add --no-cache git
 
-RUN go mod download
+COPY go.mod ./
+
+RUN go mod tidy || true
 
 COPY . .
+
+RUN go mod tidy
 
 RUN go build -o /proxy ./cmd/proxy
 RUN go build -o /gateway ./cmd/gateway
