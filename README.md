@@ -1,3 +1,20 @@
+
+
+---
+
+## ✅ What to do now
+
+1. Open your new repo:  
+   **`https://github.com/Emodv/l2agent/edit/main/README.md`**  
+   (If the repo doesn’t exist yet, create it first.)
+
+2. **Replace the entire content** with the markdown block above.
+
+3. **Commit** the change.
+
+4. (Optional) Replace all `EXAMPLE` placeholders with real links, and adjust pricing/token numbers as you see fit.
+
+**Reply “README updated” when done.**
 # L2Agent – The Optimism Layer for AI Agents
 **Slash your AI token costs by 80–90%. Built for agents, not humans.**
 
