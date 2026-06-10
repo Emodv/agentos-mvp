@@ -5,13 +5,11 @@ WORKDIR /app
 RUN apk add --no-cache git
 
 COPY go.mod ./
-
 RUN go mod tidy || true
 
 COPY . .
 
 RUN go mod tidy
-
 RUN go build -o /proxy ./cmd/proxy
 RUN go build -o /gateway ./cmd/gateway
 
@@ -23,6 +21,7 @@ WORKDIR /root/
 
 COPY --from=builder /proxy .
 COPY --from=builder /gateway .
+COPY --from=builder /app/dashboard ./dashboard
 
 EXPOSE 8080
 
