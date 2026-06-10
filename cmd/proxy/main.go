@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/Emodv/l2agent/internal/store"
 )
 
 type AnalyzeResponse struct {
@@ -153,6 +154,13 @@ func analyzeHandler(w http.ResponseWriter, r *http.Request) {
 		})
 	})
 
+	// Persist token savings to Redis
+	if agentID != "" {
+		if err := store.RecordRequest(agentID, 400, 45); err != nil {
+			log.Printf("Redis record error: %v", err)
+		}
+	}
+
 	json.NewEncoder(w).Encode(result)
 }
 
@@ -177,6 +185,13 @@ func submitHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
+	// Persist token savings to Redis
+	if req.AgentID != "" {
+		if err := store.RecordRequest(req.AgentID, 400, 45); err != nil {
+			log.Printf("Redis record error: %v", err)
+		}
+	}
+
 	json.NewEncoder(w).Encode(SubmitResponse{
 		Success:     resp.StatusCode < 400,
 		StatusCode:  resp.StatusCode,
@@ -200,6 +215,12 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
+
+	// Initialize Redis persistent store
+	if err := store.Init(); err != nil {
+		log.Printf("Warning: Redis unavailable, running without persistence: %v", err)
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", corsMiddleware(healthHandler))
 	mux.HandleFunc("/v1/analyze", corsMiddleware(apiKeyMiddleware(analyzeHandler)))
