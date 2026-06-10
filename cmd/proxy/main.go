@@ -154,7 +154,6 @@ func analyzeHandler(w http.ResponseWriter, r *http.Request) {
 		})
 	})
 
-	// Persist token savings to Redis
 	if agentID != "" {
 		if err := store.RecordRequest(agentID, 400, 45); err != nil {
 			log.Printf("Redis record error: %v", err)
@@ -185,7 +184,6 @@ func submitHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	// Persist token savings to Redis
 	if req.AgentID != "" {
 		if err := store.RecordRequest(req.AgentID, 400, 45); err != nil {
 			log.Printf("Redis record error: %v", err)
@@ -201,11 +199,59 @@ func submitHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func statsHandler(w http.ResponseWriter, r *http.Request) {
+	agentID := r.URL.Query().Get("agent_id")
+	if agentID != "" {
+		stats, err := store.GetStats(agentID)
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err), http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(stats)
+		return
+	}
+	all, err := store.GetAllAgentStats()
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err), http.StatusInternalServerError)
+		return
+	}
+	if all == nil {
+		all = []*store.AgentStats{}
+	}
+	var totalRequests, totalRaw, totalOptimized int64
+	for _, s := range all {
+		totalRequests += s.TotalRequests
+		totalRaw += s.RawTokens
+		totalOptimized += s.OptimizedTokens
+	}
+	tokensSaved := totalRaw - totalOptimized
+	var savingsPct float64
+	if totalRaw > 0 {
+		savingsPct = float64(tokensSaved) / float64(totalRaw) * 100
+	}
+	const pricePerK = 0.005
+	dollarWithout := float64(totalRaw) / 1000 * pricePerK
+	dollarWith := float64(totalOptimized) / 1000 * pricePerK
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"agents": all,
+		"totals": map[string]interface{}{
+			"total_requests":   totalRequests,
+			"raw_tokens":       totalRaw,
+			"optimized_tokens": totalOptimized,
+			"tokens_saved":     tokensSaved,
+			"savings_pct":      savingsPct,
+			"dollar_without":   dollarWithout,
+			"dollar_with":      dollarWith,
+			"dollar_saved":     dollarWithout - dollarWith,
+		},
+	})
+}
+
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":  "ok",
 		"service": "l2agent-proxy",
-		"version": "0.2.0",
+		"version": "0.3.0",
 		"time":    time.Now(),
 	})
 }
@@ -216,7 +262,6 @@ func main() {
 		port = "8080"
 	}
 
-	// Initialize Redis persistent store
 	if err := store.Init(); err != nil {
 		log.Printf("Warning: Redis unavailable, running without persistence: %v", err)
 	}
@@ -225,8 +270,9 @@ func main() {
 	mux.HandleFunc("/health", corsMiddleware(healthHandler))
 	mux.HandleFunc("/v1/analyze", corsMiddleware(apiKeyMiddleware(analyzeHandler)))
 	mux.HandleFunc("/v1/submit", corsMiddleware(apiKeyMiddleware(submitHandler)))
+	mux.HandleFunc("/v1/stats", corsMiddleware(statsHandler))
 
-	log.Printf("L2Agent Proxy v0.2.0 on :%s", port)
+	log.Printf("L2Agent Proxy v0.3.0 on :%s", port)
 	log.Printf("Dev mode: %v", os.Getenv("L2AGENT_API_KEY") == "")
 
 	if err := http.ListenAndServe(":"+port, mux); err != nil {
