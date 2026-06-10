@@ -1,5 +1,15 @@
 {
-  "rewrites": [
-    { "source": "/", "destination": "/dashboard/index.html" }
+  "version": 2,
+  "builds": [
+    {
+      "src": "dashboard/index.html",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/dashboard/index.html"
+    }
   ]
 }
