@@ -1,49 +1,42 @@
-
-
----
-
-## ✅ What to do now
-
-1. Open your new repo:  
-   **`https://github.com/Emodv/l2agent/edit/main/README.md`**  
-   (If the repo doesn’t exist yet, create it first.)
-
-2. **Replace the entire content** with the markdown block above.
-
-3. **Commit** the change.
-
-4. (Optional) Replace all `EXAMPLE` placeholders with real links, and adjust pricing/token numbers as you see fit.
-
-**Reply “README updated” when done.**
 # L2Agent – The Optimism Layer for AI Agents
-**Slash your AI token costs by 80–90%. Built for agents, not humans.**
 
-[![Demo Video](https://img.youtube.com/vi/EXAMPLE/0.jpg)](https://www.youtube.com/watch?v=EXAMPLE)
-[![Discord](https://img.shields.io/discord/123456789.svg)](https://discord.gg/EXAMPLE)
-[![Python SDK](https://img.shields.io/badge/Python-SDK-blue)](https://pypi.org/project/l2agent/)
-[![Go SDK](https://img.shields.io/badge/Go-SDK-blue)](https://github.com/Emodv/l2agent/pkg/go)
+**Built for agents, not humans. Eliminate token waste on legacy web systems.**
 
 ---
 
-## **⚡ Why L2Agent?**
-AI agents waste **40–90% of tokens** on human-oriented overhead:
-- Parsing HTML/CSS/JS
-- Navigating UIs
+## ⚡ Why L2Agent?
+
+AI agents waste tokens processing human-oriented web content:
+
+- Parsing HTML/CSS/JS noise
+- Navigating UIs built for humans
 - Handling auth/CAPTCHAs
-- Repeating identical requests
+- Repeating identical unstructured requests
 
-**L2Agent removes this waste.** It’s the **Optimism Layer for AI**—a **token-saving protocol** for agent-native workflows.
-
-| Task | Without L2Agent | With L2Agent | Savings |
-|------|----------------|--------------|---------|
-| Web Scraping | 400 tokens | 50 tokens | **87%** |
-| Form Filling | 300 tokens | 30 tokens | **90%** |
-| API Calls | 200 tokens | 20 tokens | **90%** |
+**L2Agent converts raw HTML into structured JSON** — giving agents only what they need.
 
 ---
 
-## **🚀 Quick Start**
-### **1. Install the SDK**
-#### Python
+## 📊 Benchmark Results
+
+> 🔬 **Formal benchmark in progress.**
+> Early testing shows significant token reduction on web scraping,
+> form parsing, and API response normalization.
+> Verified results will be published here once complete.
+
+| Task         | Status      |
+|--------------|-------------|
+| Web Scraping | Testing now |
+| Form Filling | Testing now |
+| API Calls    | Testing now |
+
+---
+
+## 🚀 Quick Start
+
+### Install (Go)
+
 ```bash
+go install github.com/Emodv/l2agent/cmd/l2agent@latest
+
 pip install l2agent
