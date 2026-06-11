@@ -38,5 +38,3 @@ AI agents waste tokens processing human-oriented web content:
 
 ```bash
 go install github.com/Emodv/l2agent/cmd/l2agent@latest
-
-pip install l2agent
