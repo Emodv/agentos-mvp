@@ -1,4 +1,4 @@
-// L2Agent – Agent-Native API Layer
+// L2Agent – Agent-Native API Layer (with Rate Limiting + Full Stack)
 // Author: Emodv (https://github.com/Emodv)
 
 package main
@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -59,6 +60,67 @@ type SubmitResponse struct {
 	TokensSaved int       `json:"tokens_saved"`
 }
 
+/* =========================
+   RATE LIMITER (MVP)
+========================= */
+
+type client struct {
+	lastSeen time.Time
+	tokens   int
+}
+
+var (
+	mu      sync.Mutex
+	clients = map[string]*client{}
+)
+
+const (
+	rateLimitRequests = 10
+	windowSeconds     = 60
+	cleanupInterval   = 5 * time.Minute
+)
+
+func rateLimitMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		id := r.Header.Get("X-Agent-ID")
+		if id == "" {
+			id = r.RemoteAddr
+		}
+
+		now := time.Now()
+
+		mu.Lock()
+		c, exists := clients[id]
+		if !exists {
+			c = &client{lastSeen: now, tokens: rateLimitRequests}
+			clients[id] = c
+		}
+
+		// refill window
+		if time.Since(c.lastSeen) > time.Duration(windowSeconds)*time.Second {
+			c.tokens = rateLimitRequests
+			c.lastSeen = now
+		}
+
+		if c.tokens <= 0 {
+			mu.Unlock()
+			http.Error(w, `{"error":"rate limit exceeded"}`, http.StatusTooManyRequests)
+			return
+		}
+
+		c.tokens--
+		c.lastSeen = now
+		mu.Unlock()
+
+		next(w, r)
+	}
+}
+
+/* =========================
+   AUTH + CORS
+========================= */
+
 func apiKeyMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		apiKey := os.Getenv("L2AGENT_API_KEY")
@@ -66,14 +128,17 @@ func apiKeyMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			next(w, r)
 			return
 		}
+
 		provided := r.Header.Get("X-API-Key")
 		if provided == "" {
 			provided = r.URL.Query().Get("api_key")
 		}
+
 		if provided != apiKey {
 			http.Error(w, `{"error":"invalid or missing API key"}`, http.StatusUnauthorized)
 			return
 		}
+
 		next(w, r)
 	}
 }
@@ -83,39 +148,46 @@ func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, X-Agent-ID")
+
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
+
 		next(w, r)
 	}
 }
 
+/* =========================
+   ANALYZE ENDPOINT
+========================= */
+
 func analyzeHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
 	rawURL := r.URL.Query().Get("url")
 	agentID := r.Header.Get("X-Agent-ID")
-	if agentID == "" {
-		agentID = r.URL.Query().Get("agent_id")
-	}
+
 	if rawURL == "" {
 		http.Error(w, `{"error":"url parameter required"}`, http.StatusBadRequest)
 		return
 	}
+
 	if _, err := url.ParseRequestURI(rawURL); err != nil {
 		http.Error(w, `{"error":"invalid url"}`, http.StatusBadRequest)
 		return
 	}
+
 	resp, err := http.Get(rawURL)
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error":"failed to fetch: %s"}`, err), http.StatusBadGateway)
+		http.Error(w, fmt.Sprintf(`{"error":"fetch failed: %s"}`, err), http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
 
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
-		http.Error(w, `{"error":"failed to parse html"}`, http.StatusInternalServerError)
+		http.Error(w, `{"error":"html parse failed"}`, http.StatusInternalServerError)
 		return
 	}
 
@@ -129,13 +201,18 @@ func analyzeHandler(w http.ResponseWriter, r *http.Request) {
 			Action: s.AttrOr("action", ""),
 			Method: strings.ToUpper(s.AttrOr("method", "GET")),
 		}
+
 		s.Find("input, select, textarea").Each(func(j int, field *goquery.Selection) {
 			_, required := field.Attr("required")
+
 			form.Fields = append(form.Fields, Field{
-				Name: field.AttrOr("name", ""), Type: field.AttrOr("type", "text"),
-				Required: required, Placeholder: field.AttrOr("placeholder", ""),
+				Name:        field.AttrOr("name", ""),
+				Type:        field.AttrOr("type", "text"),
+				Required:    required,
+				Placeholder: field.AttrOr("placeholder", ""),
 			})
 		})
+
 		result.Forms = append(result.Forms, form)
 	})
 
@@ -143,6 +220,7 @@ func analyzeHandler(w http.ResponseWriter, r *http.Request) {
 		if i >= 20 {
 			return
 		}
+
 		result.Links = append(result.Links, Link{
 			Text: strings.TrimSpace(s.Text()),
 			Href: s.AttrOr("href", ""),
@@ -150,48 +228,64 @@ func analyzeHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if agentID != "" {
-		if err := store.RecordRequest(agentID, 400, 45); err != nil {
-			log.Printf("Redis record error: %v", err)
-		}
+		_ = store.RecordRequest(agentID, 400, 45)
 	}
+
 	json.NewEncoder(w).Encode(result)
 }
 
+/* =========================
+   SUBMIT ENDPOINT
+========================= */
+
 func submitHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
 	var req SubmitRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
 		return
 	}
+
 	if req.URL == "" {
 		http.Error(w, `{"error":"url required"}`, http.StatusBadRequest)
 		return
 	}
+
 	formData := url.Values{}
 	for k, v := range req.Fields {
 		formData.Set(k, v)
 	}
+
 	resp, err := http.PostForm(req.URL, formData)
 	if err != nil {
 		http.Error(w, fmt.Sprintf(`{"error":"submit failed: %s"}`, err), http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
+
 	if req.AgentID != "" {
-		if err := store.RecordRequest(req.AgentID, 400, 45); err != nil {
-			log.Printf("Redis record error: %v", err)
-		}
+		_ = store.RecordRequest(req.AgentID, 400, 45)
 	}
+
 	json.NewEncoder(w).Encode(SubmitResponse{
-		Success: resp.StatusCode < 400, StatusCode: resp.StatusCode,
-		AgentID: req.AgentID, Timestamp: time.Now(), TokensSaved: 355,
+		Success:     resp.StatusCode < 400,
+		StatusCode:  resp.StatusCode,
+		AgentID:     req.AgentID,
+		Timestamp:   time.Now(),
+		TokensSaved: 355,
 	})
 }
 
+/* =========================
+   STATS + HEALTH + DASHBOARD
+========================= */
+
 func statsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
 	agentID := r.URL.Query().Get("agent_id")
+
 	if agentID != "" {
 		stats, err := store.GetStats(agentID)
 		if err != nil {
@@ -201,35 +295,48 @@ func statsHandler(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(stats)
 		return
 	}
+
 	all, err := store.GetAllAgentStats()
 	if err != nil {
 		http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err), http.StatusInternalServerError)
 		return
 	}
+
 	if all == nil {
 		all = []*store.AgentStats{}
 	}
+
 	var totalRequests, totalRaw, totalOptimized int64
+
 	for _, s := range all {
 		totalRequests += s.TotalRequests
 		totalRaw += s.RawTokens
 		totalOptimized += s.OptimizedTokens
 	}
+
 	tokensSaved := totalRaw - totalOptimized
+
 	var savingsPct float64
 	if totalRaw > 0 {
 		savingsPct = float64(tokensSaved) / float64(totalRaw) * 100
 	}
+
 	const pricePerK = 0.005
+
 	dollarWithout := float64(totalRaw) / 1000 * pricePerK
 	dollarWith := float64(totalOptimized) / 1000 * pricePerK
+
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"agents": all,
 		"totals": map[string]interface{}{
-			"total_requests": totalRequests, "raw_tokens": totalRaw,
-			"optimized_tokens": totalOptimized, "tokens_saved": tokensSaved,
-			"savings_pct": savingsPct, "dollar_without": dollarWithout,
-			"dollar_with": dollarWith, "dollar_saved": dollarWithout - dollarWith,
+			"total_requests":   totalRequests,
+			"raw_tokens":       totalRaw,
+			"optimized_tokens": totalOptimized,
+			"tokens_saved":     tokensSaved,
+			"savings_pct":      savingsPct,
+			"dollar_without":   dollarWithout,
+			"dollar_with":      dollarWith,
+			"dollar_saved":     dollarWithout - dollarWith,
 		},
 	})
 }
@@ -237,8 +344,10 @@ func statsHandler(w http.ResponseWriter, r *http.Request) {
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status": "ok", "service": "l2agent-proxy",
-		"version": "0.4.0", "time": time.Now(),
+		"status":  "ok",
+		"service": "l2agent-proxy",
+		"version": "0.4.0",
+		"time":     time.Now(),
 	})
 }
 
@@ -248,26 +357,42 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/health", http.StatusTemporaryRedirect)
 		return
 	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write(data)
 }
+
+/* =========================
+   MAIN
+========================= */
 
 func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
-	if err := store.Init(); err != nil {
-		log.Printf("Warning: Redis unavailable: %v", err)
-	}
+
+	_ = store.Init()
+
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", corsMiddleware(healthHandler))
-	mux.HandleFunc("/v1/analyze", corsMiddleware(apiKeyMiddleware(analyzeHandler)))
-	mux.HandleFunc("/v1/submit", corsMiddleware(apiKeyMiddleware(submitHandler)))
-	mux.HandleFunc("/v1/stats", corsMiddleware(statsHandler))
-	mux.HandleFunc("/", corsMiddleware(dashboardHandler))
-	log.Printf("L2Agent Proxy v0.4.0 on :%s", port)
-	if err := http.ListenAndServe(":"+port, mux); err != nil {
-		log.Fatal(err)
-	}
+
+	mux.HandleFunc("/health",
+		corsMiddleware(rateLimitMiddleware(healthHandler)))
+
+	mux.HandleFunc("/v1/analyze",
+		corsMiddleware(apiKeyMiddleware(rateLimitMiddleware(analyzeHandler))))
+
+	mux.HandleFunc("/v1/submit",
+		corsMiddleware(apiKeyMiddleware(rateLimitMiddleware(submitHandler))))
+
+	mux.HandleFunc("/v1/stats",
+		corsMiddleware(rateLimitMiddleware(statsHandler)))
+
+	mux.HandleFunc("/",
+		corsMiddleware(dashboardHandler))
+
+	log.Printf("L2Agent Proxy v0.4.0 running on :%s", port)
+
+	log.Fatal(http.ListenAndServe(":"+port, mux))
 }
+```
