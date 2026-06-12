@@ -1,28 +1,22 @@
-FROM golang:1.21-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 
-RUN apk add --no-cache git
-
-COPY go.mod ./
-RUN go mod tidy || true
+# Cache dependencies separately from source for faster rebuilds.
+COPY go.mod go.sum ./
+RUN go mod download
 
 COPY . .
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /l2agent ./cmd/l2agent
 
-RUN go mod tidy
-RUN go build -o /proxy ./cmd/proxy
-RUN go build -o /gateway ./cmd/gateway
+FROM alpine:3.21
 
-FROM alpine:latest
+RUN apk --no-cache add ca-certificates && adduser -D -u 10001 app
+USER app
+WORKDIR /home/app
 
-RUN apk --no-cache add ca-certificates
-
-WORKDIR /root/
-
-COPY --from=builder /proxy .
-COPY --from=builder /gateway .
-COPY --from=builder /app/dashboard ./dashboard
+COPY --from=builder /l2agent .
 
 EXPOSE 8080
 
-CMD ["./proxy"]
+CMD ["./l2agent", "serve"]

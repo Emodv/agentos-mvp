@@ -2,10 +2,8 @@
 builder = "dockerfile"
 
 [deploy]
-startCommand = "./proxy"
+startCommand = "./l2agent serve"
+healthcheckPath = "/healthz"
+healthcheckTimeout = 60
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
-
-[env]
-REDIS_URL = { value = "${REDIS_URL}" }
-L2AGENT_API_KEY = { value = "${L2AGENT_API_KEY}" }

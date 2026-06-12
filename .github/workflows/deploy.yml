@@ -1,8 +1,9 @@
-name: Build L2Agent
+name: CI
 
 on:
   push:
     branches: [ main ]
+  pull_request:
 
 jobs:
   build:
@@ -12,16 +13,22 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.23'
 
-      - name: Tidy Go modules
-        run: go mod tidy
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
 
       - name: Build
         run: make build
 
-      - name: Upload binaries
+      - name: Docker build
+        run: docker build -t l2agent .
+
+      - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
-          name: l2agent-binaries
+          name: l2agent
           path: bin/

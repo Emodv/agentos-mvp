@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>L2Agent — Token Savings Dashboard</title>
+<style>
+  :root {
+    --bg: #0b0e14; --panel: #131826; --border: #232b3d;
+    --text: #e6e9f0; --muted: #8b93a7; --accent: #4ade80; --accent2: #60a5fa;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 15px/1.6 system-ui, -apple-system, sans-serif; min-height: 100vh; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 40px 20px; }
+  h1 { font-size: 1.6rem; letter-spacing: -.02em; }
+  h1 span { color: var(--accent); }
+  .sub { color: var(--muted); margin: 6px 0 28px; }
+  .config { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+  .config input { flex: 1; min-width: 220px; background: var(--panel); border: 1px solid var(--border); color: var(--text); padding: 10px 14px; border-radius: 8px; font-size: 14px; }
+  .config button { background: var(--accent2); border: 0; color: #0b0e14; font-weight: 600; padding: 10px 18px; border-radius: 8px; cursor: pointer; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+  .card .label { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; }
+  .card .value { font-size: 1.7rem; font-weight: 700; margin-top: 4px; }
+  .card .value.green { color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 14px; }
+  th { color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; }
+  tr:last-child td { border-bottom: 0; }
+  .pct { color: var(--accent); font-weight: 600; }
+  #status { color: var(--muted); font-size: .85rem; margin-top: 14px; }
+  #status.err { color: #f87171; }
+  .empty { padding: 28px; text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>L2<span>Agent</span> Dashboard</h1>
+  <p class="sub">Measured token savings from structured web access. Stats are estimates (~4 chars/token).</p>
+
+  <div class="config">
+    <input id="api" type="url" placeholder="API base URL, e.g. https://your-app.up.railway.app">
+    <input id="key" type="password" placeholder="API key (only if configured)">
+    <button onclick="saveAndRefresh()">Connect</button>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="label">Agents</div><div class="value" id="c-agents">–</div></div>
+    <div class="card"><div class="label">Requests</div><div class="value" id="c-reqs">–</div></div>
+    <div class="card"><div class="label">Tokens Saved</div><div class="value green" id="c-saved">–</div></div>
+    <div class="card"><div class="label">Avg Savings</div><div class="value green" id="c-pct">–</div></div>
+  </div>
+
+  <table>
+    <thead><tr><th>Agent</th><th>Requests</th><th>Raw Tokens</th><th>Optimized</th><th>Saved</th><th>Savings</th><th>Last Seen</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="7" class="empty">Enter your API URL above to load stats.</td></tr></tbody>
+  </table>
+  <p id="status"></p>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = n => n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'k' : String(n);
+
+function saveAndRefresh() {
+  localStorage.setItem('l2_api', $('api').value.trim().replace(/\/+$/, ''));
+  localStorage.setItem('l2_key', $('key').value);
+  refresh();
+}
+
+async function refresh() {
+  const base = localStorage.getItem('l2_api');
+  if (!base) return;
+  $('api').value = base;
+  $('status').textContent = 'Loading…'; $('status').className = '';
+  try {
+    const headers = {};
+    const key = localStorage.getItem('l2_key');
+    if (key) headers['X-API-Key'] = key;
+    const res = await fetch(base + '/v1/stats', { headers });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    render(await res.json());
+    $('status').textContent = 'Updated ' + new Date().toLocaleTimeString() + ' — auto-refreshes every 15s';
+  } catch (e) {
+    $('status').textContent = 'Could not reach API: ' + e.message; $('status').className = 'err';
+  }
+}
+
+function render(data) {
+  const agents = data.agents || [];
+  let reqs = 0, saved = 0, raw = 0;
+  agents.forEach(a => { reqs += a.total_requests; saved += a.tokens_saved; raw += a.raw_tokens; });
+  $('c-agents').textContent = agents.length;
+  $('c-reqs').textContent = fmt(reqs);
+  $('c-saved').textContent = fmt(saved);
+  $('c-pct').textContent = raw ? (saved / raw * 100).toFixed(1) + '%' : '–';
+  $('rows').innerHTML = agents.length
+    ? agents.map(a => `<tr><td>${esc(a.agent_id)}</td><td>${fmt(a.total_requests)}</td><td>${fmt(a.raw_tokens)}</td><td>${fmt(a.optimized_tokens)}</td><td>${fmt(a.tokens_saved)}</td><td class="pct">${a.savings_pct.toFixed(1)}%</td><td>${a.last_seen ? new Date(a.last_seen).toLocaleString() : '–'}</td></tr>`).join('')
+    : '<tr><td colspan="7" class="empty">No agent activity yet. Call /v1/analyze with an X-Agent-ID header.</td></tr>';
+}
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+refresh();
+setInterval(refresh, 15000);
+</script>
+</body>
+</html>

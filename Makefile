@@ -1,14 +1,22 @@
-.PHONY: run-gateway run-proxy build deps
+.PHONY: build test vet run gateway docker clean
 
-deps:
-	go mod tidy
+build:
+	go build -o bin/l2agent ./cmd/l2agent
 
-build: deps
-	go build -o bin/gateway ./cmd/gateway
-	go build -o bin/proxy ./cmd/proxy
+test:
+	go test ./...
 
-run-gateway: build
-	./bin/gateway
+vet:
+	go vet ./...
 
-run-proxy: build
-	./bin/proxy
+run: build
+	./bin/l2agent serve
+
+gateway: build
+	./bin/l2agent gateway
+
+docker:
+	docker build -t l2agent .
+
+clean:
+	rm -rf bin
