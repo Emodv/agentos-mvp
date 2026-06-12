@@ -125,7 +125,7 @@ func rateLimitMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 func doRequest(method, u string, body io.Reader, extraHeaders map[string]string) (*http.Response, error) {
 	req, _ := http.NewRequest(method, u, body)
-	req.Header.Set("User-Agent", "L2Agent/0.5")
+	req.Header.Set("User-Agent", "L2Agent/0.5 (+https://github.com/Emodv/l2agent)")
 	for k, v := range extraHeaders { req.Header.Set(k, v) }
 	return httpClient.Do(req)
 }
@@ -138,7 +138,40 @@ func estimateTokens(html string) int {
 	return t
 }
 
-// Handlers (simplified + robust)
+// Full middlewares (add these)
+func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, X-Agent-ID")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		next(w, r)
+	}
+}
+
+func apiKeyMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		apiKey := os.Getenv("L2AGENT_API_KEY")
+		if apiKey == "" {
+			next(w, r)
+			return
+		}
+		provided := r.Header.Get("X-API-Key")
+		if provided == "" {
+			provided = r.URL.Query().Get("api_key")
+		}
+		if provided != apiKey {
+			http.Error(w, `{"error":"invalid or missing API key"}`, 401)
+			return
+		}
+		next(w, r)
+	}
+}
+
+// Improved analyzeHandler
 func analyzeHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	rawURL := r.URL.Query().Get("url")
@@ -161,57 +194,10 @@ func analyzeHandler(w http.ResponseWriter, r *http.Request) {
 		Tokens: estimateTokens(html), TokensSaved: estimateTokens(html) * 8,
 	}
 
-	// forms + links (existing logic kept)
+	// Forms
 	doc.Find("form").Each(func(_ int, s *goquery.Selection) {
-		// ... (keep your form extraction)
-		form := Form{Action: s.AttrOr("action", ""), Method: strings.ToUpper(s.AttrOr("method", "GET"))}
-		// fields...
-		result.Forms = append(result.Forms, form)
-	})
-
-	doc.Find("a[href]").Each(func(i int, s *goquery.Selection) {
-		if i >= 20 { return }
-		href := s.AttrOr("href", "")
-		if href != "" && !strings.HasPrefix(href, "#") {
-			result.Links = append(result.Links, Link{Text: strings.TrimSpace(s.Text()), Href: href})
+		form := Form{
+			Action: s.AttrOr("action", ""),
+			Method: strings.ToUpper(s.AttrOr("method", "GET")),
 		}
-	})
-
-	if id := r.Header.Get("X-Agent-ID"); id != "" {
-		store.RecordRequest(id, result.Tokens, result.TokensSaved)
-	}
-
-	json.NewEncoder(w).Encode(result)
-}
-
-func submitHandler(w http.ResponseWriter, r *http.Request) {
-	// ... (keep decode + post logic, add small response body read)
-	var req SubmitRequest
-	json.NewDecoder(r.Body).Decode(&req)
-	// ... post ...
-
-	respBody, _ := io.ReadAll(resp.Body)
-	json.NewEncoder(w).Encode(SubmitResponse{
-		Success: resp.StatusCode < 400, StatusCode: resp.StatusCode,
-		TokensSaved: 400, Response: string(respBody)[:200], // truncate
-	})
-}
-
-// ... keep stats, health, dashboard ...
-
-func main() {
-	port := os.Getenv("PORT")
-	if port == "" { port = "8080" }
-
-	store.Init()
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("/health", corsMiddleware(rateLimitMiddleware(healthHandler)))
-	mux.HandleFunc("/v1/analyze", corsMiddleware(apiKeyMiddleware(rateLimitMiddleware(analyzeHandler))))
-	mux.HandleFunc("/v1/submit", corsMiddleware(apiKeyMiddleware(rateLimitMiddleware(submitHandler))))
-	mux.HandleFunc("/v1/stats", corsMiddleware(rateLimitMiddleware(statsHandler)))
-	mux.HandleFunc("/", corsMiddleware(dashboardHandler))
-
-	log.Printf("L2Agent Proxy v0.5 on :%s", port)
-	log.Fatal(http.ListenAndServe(":"+port, mux))
-}
+		s.Find("input, select, textarea").Each
