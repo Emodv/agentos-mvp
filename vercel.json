@@ -4,9 +4,17 @@
     {
       "src": "dashboard/index.html",
       "use": "@vercel/static"
+    },
+    {
+      "src": "api/probe.js",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
+    {
+      "src": "/api/probe",
+      "dest": "/api/probe.js"
+    },
     {
       "src": "/(.*)",
       "dest": "/dashboard/index.html"
