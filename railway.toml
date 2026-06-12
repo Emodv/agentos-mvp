@@ -5,3 +5,7 @@ builder = "dockerfile"
 startCommand = "./proxy"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
+
+[env]
+REDIS_URL = { value = "${REDIS_URL}" }
+L2AGENT_API_KEY = { value = "${L2AGENT_API_KEY}" }
