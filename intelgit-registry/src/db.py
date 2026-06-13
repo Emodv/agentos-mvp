@@ -1,11 +1,10 @@
-"""SQLite-backed registry store (async-safe via thread pool)."""
+"""SQLite-backed registry store."""
 import json
-import re
 import sqlite3
 from pathlib import Path
 from typing import Optional
 
-DATA_DIR = Path("/data/intelgit")  # override with env var INTELGIT_DATA
+DATA_DIR = Path("/data/intelgit")
 
 
 def get_data_dir() -> Path:
@@ -25,7 +24,15 @@ def get_conn() -> sqlite3.Connection:
 
 def init_db():
     conn = get_conn()
-    conn.execute("""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS users (
+            id           TEXT PRIMARY KEY,
+            display_name TEXT,
+            api_key_hash TEXT UNIQUE NOT NULL,
+            credits      REAL DEFAULT 1000,
+            created_at   TEXT DEFAULT (datetime('now'))
+        );
+
         CREATE TABLE IF NOT EXISTS kos (
             id           TEXT PRIMARY KEY,
             goal         TEXT NOT NULL,
@@ -39,24 +46,49 @@ def init_db():
             license      TEXT,
             created_at   TEXT,
             signer_did   TEXT,
+            creator_id   TEXT,
             reuse_count  INTEGER DEFAULT 0,
             pushed_at    TEXT DEFAULT (datetime('now'))
-        )
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_goal     ON kos(goal);
+        CREATE INDEX IF NOT EXISTS idx_signer   ON kos(signer_did);
+        CREATE INDEX IF NOT EXISTS idx_creator  ON kos(creator_id);
+
+        CREATE TABLE IF NOT EXISTS packages (
+            name         TEXT PRIMARY KEY,
+            latest_ko_id TEXT NOT NULL,
+            owner_id     TEXT,
+            description  TEXT,
+            created_at   TEXT DEFAULT (datetime('now')),
+            updated_at   TEXT DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS payments (
+            id          TEXT PRIMARY KEY,
+            from_agent  TEXT,
+            to_agent    TEXT,
+            ko_id       TEXT,
+            amount_msat INTEGER,
+            status      TEXT,
+            tx_id       TEXT,
+            created_at  TEXT
+        );
     """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_goal ON kos(goal)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_signer ON kos(signer_did)")
     conn.commit()
     conn.close()
 
 
-def upsert_ko(ko: dict):
-    conn = get_conn()
+# ── KOs ───────────────────────────────────────────────────────────────────────
+
+def upsert_ko(ko: dict, creator_id: Optional[str] = None):
     proof = ko.get("proof", {})
+    conn = get_conn()
     conn.execute("""
         INSERT OR REPLACE INTO kos
         (id, goal, inputs, output_hash, proof, dependencies,
-         confidence, cost_usd, latency_ms, license, created_at, signer_did)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         confidence, cost_usd, latency_ms, license, created_at, signer_did, creator_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         ko["id"],
         ko["goal"],
@@ -69,7 +101,8 @@ def upsert_ko(ko: dict):
         ko.get("latency_ms", 0),
         ko.get("license", "reuse-with-attribution"),
         ko.get("created_at", ""),
-        proof.get("signer_did", ""),
+        proof.get("signer_did", "") if isinstance(proof, dict) else "",
+        creator_id,
     ))
     conn.commit()
     conn.close()
@@ -112,13 +145,55 @@ def leaderboard(limit: int = 20) -> list[dict]:
     conn = get_conn()
     rows = conn.execute("""
         SELECT signer_did,
-               COUNT(*)       AS ko_count,
+               COUNT(*)         AS ko_count,
                SUM(reuse_count) AS total_reuses
         FROM kos
         GROUP BY signer_did
         ORDER BY total_reuses DESC
         LIMIT ?
     """, (limit,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def recent_kos(limit: int = 20) -> list[dict]:
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM kos ORDER BY pushed_at DESC LIMIT ?", (limit,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+# ── Packages ──────────────────────────────────────────────────────────────────
+
+def upsert_package(name: str, ko_id: str, owner_id: str, description: str = ""):
+    conn = get_conn()
+    conn.execute("""
+        INSERT INTO packages (name, latest_ko_id, owner_id, description)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(name) DO UPDATE SET
+            latest_ko_id = excluded.latest_ko_id,
+            description  = excluded.description,
+            updated_at   = datetime('now')
+        WHERE owner_id = excluded.owner_id
+    """, (name, ko_id, owner_id, description))
+    conn.commit()
+    conn.close()
+
+
+def fetch_package(name: str) -> Optional[dict]:
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM packages WHERE name = ?", (name,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def list_packages(limit: int = 50) -> list[dict]:
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM packages ORDER BY updated_at DESC LIMIT ?", (limit,)
+    ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 

@@ -1,6 +1,8 @@
 import click
 
+from ..core import config
 from ..core.crypto import verify_signature
+from ..core.registry_client import RegistryClient
 from ..core.store import KOLocalStore
 
 REUSE_COST_USD = 0.000001
@@ -17,11 +19,35 @@ def reuse(ko_id: str, no_verify: bool, quiet: bool):
     """
     Reuse a knowledge object's cached output without calling the LLM.
 
-    Verifies the KO's cryptographic signature before returning the output,
-    and reports the simulated micropayment to the original creator.
+    Checks local cache first, then transparently fetches from the global
+    registry and installs locally if not found.
     """
     store = KOLocalStore()
     ko = store.get(ko_id)
+    output = store.get_output(ko_id) if ko else None
+
+    # Registry fallback
+    if ko is None or output is None:
+        cfg = config.load()
+        url = cfg.get("registry_url")
+        if url:
+            if not quiet:
+                click.echo(f"Not in local cache – fetching from registry …")
+            client = RegistryClient(url)
+
+            if ko is None:
+                ko_data = client.get_ko(ko_id)
+                if ko_data:
+                    _store_remote_ko(ko_data, store)
+                    ko = store.get(ko_id)
+
+            if output is None and ko:
+                raw = client.get_output(ko_id)
+                if raw:
+                    store._write_output(ko_id, raw)
+                    output = raw.decode(errors="replace")
+                    client.record_reuse(ko_id)
+
     if not ko:
         click.echo(f"KO not found: {ko_id}", err=True)
         raise SystemExit(1)
@@ -35,10 +61,9 @@ def reuse(ko_id: str, no_verify: bool, quiet: bool):
             click.echo("FAIL  Invalid signature — refusing to reuse.", err=True)
             raise SystemExit(2)
 
-    output = store.get_output(ko_id)
     if output is None:
         click.echo(
-            f"No local output cached for {ko_id}.\n"
+            f"No output cached for {ko_id}.\n"
             "Re-run `ko commit` with the same goal to populate the cache.",
             err=True,
         )
@@ -52,3 +77,32 @@ def reuse(ko_id: str, no_verify: bool, quiet: bool):
     if not no_verify:
         click.echo(f"Verified signature ({ko.proof.signer_did[:32]}…)")
     click.echo(f"Paid ${REUSE_COST_USD:.6f} to creator  |  latency ~{REUSE_LATENCY_MS}ms")
+
+
+def _store_remote_ko(ko_data: dict, store: KOLocalStore):
+    """Reconstruct and locally store a KO fetched from registry."""
+    import json
+    from datetime import datetime, timezone
+    from ..core.ko import KnowledgeObject, Proof
+    proof_data = ko_data.get("proof") or {}
+    if isinstance(proof_data, str):
+        proof_data = json.loads(proof_data)
+    try:
+        ko = KnowledgeObject(
+            id=ko_data["id"],
+            goal=ko_data["goal"],
+            inputs=ko_data.get("inputs") or {},
+            output_hash=ko_data.get("output_hash", ""),
+            proof=Proof(**proof_data),
+            dependencies=ko_data.get("dependencies") or [],
+            confidence=ko_data.get("confidence", 0.5),
+            cost_usd=ko_data.get("cost_usd", 0.0),
+            latency_ms=ko_data.get("latency_ms", 0),
+            license=ko_data.get("license", "reuse-with-attribution"),
+            created_at=datetime.fromisoformat(
+                ko_data.get("created_at") or datetime.now(timezone.utc).isoformat()
+            ),
+        )
+        store.put(ko)
+    except Exception:
+        pass

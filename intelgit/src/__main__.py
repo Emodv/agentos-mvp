@@ -8,6 +8,8 @@ from .cli.install import install
 from .cli.find import find
 from .cli.reuse import reuse
 from .cli.config_cmd import config_cmd
+from .cli.login import login
+from .cli.status import status, whoami, balance
 from .core.store import KOLocalStore
 
 
@@ -39,7 +41,7 @@ def search_cmd(query: str, top_k: int, registry: bool):
     store = KOLocalStore()
     results = store.search_by_goal(query, top_k=top_k)
     if results:
-        click.echo(f"Local results:")
+        click.echo("Local results:")
         for ko in results:
             click.echo(f"  {ko.id}  {ko.goal[:70]}")
     else:
@@ -67,6 +69,10 @@ cli.add_command(install)
 cli.add_command(find)
 cli.add_command(reuse)
 cli.add_command(config_cmd)
+cli.add_command(login)
+cli.add_command(status)
+cli.add_command(whoami)
+cli.add_command(balance)
 
 
 if __name__ == "__main__":
