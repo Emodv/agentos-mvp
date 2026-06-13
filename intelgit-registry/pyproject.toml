@@ -1,0 +1,25 @@
+[project]
+name = "intelgit-registry"
+version = "0.1.0"
+description = "IntelGit Hub – public registry server for Knowledge Objects"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "pydantic>=2.0.0",
+    "aiofiles>=23.0.0",
+    "python-multipart>=0.0.9",
+    "base58>=2.1.1",
+    "cryptography>=41.0.0",
+]
+
+[project.scripts]
+intelgit-registry = "src.main:start"
+
+[build-system]
+requires = ["setuptools>=65.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
