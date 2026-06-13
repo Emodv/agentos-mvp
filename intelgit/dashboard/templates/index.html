@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IntelGit – Outreach Dashboard</title>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d2e;
+    --border: #2d3150;
+    --accent: #6c63ff;
+    --accent2: #00d4aa;
+    --text: #e2e8f0;
+    --muted: #8892b0;
+    --success: #48bb78;
+    --warning: #ed8936;
+    --danger: #fc8181;
+    --card-shadow: 0 4px 24px rgba(0,0,0,.4);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; min-height: 100vh; }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 1rem 2rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  header .logo { font-size: 1.4rem; font-weight: 700; color: var(--accent); letter-spacing: -.5px; }
+  header .subtitle { color: var(--muted); font-size: .875rem; }
+  header .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); animation: pulse 2s infinite; margin-left: auto; }
+  header .dot-label { color: var(--muted); font-size: .75rem; margin-left: .4rem; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+
+  .container { max-width: 1400px; margin: 0 auto; padding: 1.5rem 2rem; }
+
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    box-shadow: var(--card-shadow);
+  }
+  .kpi-card .label { color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: .5rem; }
+  .kpi-card .value { font-size: 2rem; font-weight: 700; color: var(--text); }
+  .kpi-card .delta { font-size: .75rem; color: var(--success); margin-top: .25rem; }
+  .kpi-card .value.accent  { color: var(--accent); }
+  .kpi-card .value.accent2 { color: var(--accent2); }
+
+  .charts-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  .charts-row-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+    box-shadow: var(--card-shadow);
+  }
+  .card h3 {
+    font-size: .875rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    margin-bottom: 1rem;
+  }
+  .chart-container { width: 100%; min-height: 220px; }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+  th { color: var(--muted); font-weight: 600; text-align: left; padding: .5rem .75rem; border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: .06em; font-size: .7rem; }
+  td { padding: .55rem .75rem; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(108,99,255,.05); }
+
+  .badge {
+    display: inline-block;
+    padding: .15rem .55rem;
+    border-radius: 20px;
+    font-size: .7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .badge-github  { background: rgba(255,255,255,.1); color: #e2e8f0; }
+  .badge-reddit  { background: rgba(255,69,0,.2);    color: #fc8181; }
+  .badge-twitter { background: rgba(29,161,242,.2);  color: #63b3ed; }
+  .badge-pr      { background: rgba(72,187,120,.2);  color: #48bb78; }
+
+  .timestamp { color: var(--muted); font-size: .75rem; }
+  .url-link { color: var(--accent); text-decoration: none; font-size: .75rem; }
+  .url-link:hover { text-decoration: underline; }
+
+  footer { text-align: center; padding: 2rem; color: var(--muted); font-size: .75rem; }
+  .refresh-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: .5rem 1rem;
+    font-size: .8rem;
+    cursor: pointer;
+    margin-left: auto;
+  }
+  .refresh-btn:hover { opacity: .85; }
+  .header-actions { display: flex; align-items: center; gap: 1rem; margin-left: auto; }
+
+  @media (max-width: 900px) {
+    .charts-row, .charts-row-3 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="logo">⚡ IntelGit</span>
+  <span class="subtitle">Outreach Dashboard</span>
+  <div class="header-actions">
+    <span class="dot"></span>
+    <span class="dot-label">Live</span>
+    <button class="refresh-btn" onclick="location.reload()">↻ Refresh</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- KPI Row -->
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <div class="label">Total Prospects</div>
+      <div class="value accent">{{ stats.total_prospects }}</div>
+      <div class="delta">Repositories identified</div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">Total Outreach</div>
+      <div class="value accent2">{{ stats.total_outreach }}</div>
+      <div class="delta">Actions sent</div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">Responded</div>
+      <div class="value">{{ stats.by_status.get('responded', 0) }}</div>
+      <div class="delta">
+        {% if stats.total_outreach > 0 %}
+          {{ "%.1f"|format(stats.by_status.get('responded',0) / stats.total_outreach * 100) }}% response rate
+        {% else %}
+          —
+        {% endif %}
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">Converted</div>
+      <div class="value" style="color:var(--success)">{{ stats.by_status.get('converted', 0) }}</div>
+      <div class="delta">
+        {% if stats.by_status.get('responded', 0) > 0 %}
+          {{ "%.1f"|format(stats.by_status.get('converted',0) / stats.by_status.get('responded',1) * 100) }}% close rate
+        {% else %}
+          —
+        {% endif %}
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">Platforms</div>
+      <div class="value">{{ stats.by_platform|length }}</div>
+      <div class="delta">{{ stats.by_platform.keys()|join(', ') or '—' }}</div>
+    </div>
+  </div>
+
+  <!-- Daily activity + Funnel -->
+  <div class="charts-row">
+    <div class="card">
+      <h3>Daily Outreach (last 14 days)</h3>
+      <div class="chart-container" id="chart-daily"></div>
+    </div>
+    <div class="card">
+      <h3>Conversion Funnel</h3>
+      <div class="chart-container" id="chart-funnel"></div>
+    </div>
+  </div>
+
+  <!-- Platform + Status breakdown -->
+  <div class="charts-row-3">
+    <div class="card">
+      <h3>By Platform</h3>
+      <div class="chart-container" id="chart-platform"></div>
+    </div>
+    <div class="card">
+      <h3>Prospect Status</h3>
+      <div class="chart-container" id="chart-status"></div>
+    </div>
+    <div class="card">
+      <h3>Top Repos</h3>
+      <div class="table-wrap" style="max-height:240px;overflow-y:auto">
+        <table>
+          <thead><tr><th>Repo</th><th>Touches</th></tr></thead>
+          <tbody>
+          {% for r in stats.top_repos %}
+            <tr>
+              <td>
+                <a class="url-link" href="{{ r.repo_url }}" target="_blank">
+                  {{ (r.repo_url or '').split('/')[-1] or r.username or '—' }}
+                </a>
+                <span class="badge badge-{{ r.platform or 'github' }}" style="margin-left:.4rem">{{ r.platform or '—' }}</span>
+              </td>
+              <td>{{ r.touches }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="2" style="color:var(--muted);text-align:center;padding:2rem">No data yet</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Activity -->
+  <div class="card">
+    <h3>Recent Activity</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Platform</th>
+            <th>Action</th>
+            <th>Target</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for r in stats.recent %}
+          <tr>
+            <td class="timestamp">{{ r.sent_at[:16].replace('T',' ') if r.sent_at else '—' }}</td>
+            <td><span class="badge badge-{{ r.platform or 'github' }}">{{ r.platform or '—' }}</span></td>
+            <td>{{ r.action or '—' }}</td>
+            <td>
+              {% if r.repo_url %}
+                <a class="url-link" href="{{ r.repo_url }}" target="_blank">{{ r.username or r.repo_url }}</a>
+              {% else %}
+                {{ r.username or '—' }}
+              {% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="4" style="color:var(--muted);text-align:center;padding:2rem">No activity yet — run <code>ko ambassador</code> to start outreach</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  Generated {{ stats.generated_at[:16].replace('T',' ') }} UTC &nbsp;·&nbsp; IntelGit – Git for Intelligence
+</footer>
+
+<script>
+const stats = {{ stats_json|safe }};
+
+const PLOTLY_LAYOUT = {
+  paper_bgcolor: 'transparent',
+  plot_bgcolor: 'transparent',
+  font: { color: '#8892b0', size: 11 },
+  margin: { t: 10, b: 30, l: 40, r: 10 },
+  showlegend: false,
+};
+
+const ACCENT  = '#6c63ff';
+const ACCENT2 = '#00d4aa';
+const COLORS  = ['#6c63ff','#00d4aa','#fc8181','#ed8936','#63b3ed','#48bb78'];
+
+// Daily outreach
+(function() {
+  const days  = stats.daily.map(d => d.date);
+  const cnts  = stats.daily.map(d => d.count);
+  Plotly.newPlot('chart-daily', [{
+    x: days, y: cnts, type: 'bar',
+    marker: { color: ACCENT, opacity: .85 },
+    hovertemplate: '%{x}<br>%{y} actions<extra></extra>',
+  }], {
+    ...PLOTLY_LAYOUT,
+    xaxis: { showgrid: false, tickangle: -30 },
+    yaxis: { showgrid: true, gridcolor: '#2d3150', zeroline: false },
+  }, { responsive: true, displayModeBar: false });
+})();
+
+// Funnel
+(function() {
+  const stages = stats.funnel.map(s => s.stage);
+  const counts = stats.funnel.map(s => s.count);
+  Plotly.newPlot('chart-funnel', [{
+    type: 'funnel',
+    y: stages,
+    x: counts,
+    textinfo: 'value+percent initial',
+    marker: { color: COLORS },
+    connector: { line: { color: '#2d3150' } },
+  }], {
+    ...PLOTLY_LAYOUT,
+    margin: { t: 10, b: 10, l: 80, r: 10 },
+  }, { responsive: true, displayModeBar: false });
+})();
+
+// Platform pie
+(function() {
+  const labels  = Object.keys(stats.by_platform);
+  const values  = Object.values(stats.by_platform);
+  if (!labels.length) return document.getElementById('chart-platform').innerHTML = '<p style="color:#8892b0;text-align:center;padding:3rem .5rem">No data yet</p>';
+  Plotly.newPlot('chart-platform', [{
+    type: 'pie', labels, values,
+    marker: { colors: COLORS },
+    hole: .45,
+    textinfo: 'label+percent',
+    hovertemplate: '%{label}: %{value}<extra></extra>',
+  }], { ...PLOTLY_LAYOUT, margin: { t: 0, b: 0, l: 0, r: 0 } }, { responsive: true, displayModeBar: false });
+})();
+
+// Status donut
+(function() {
+  const labels  = Object.keys(stats.by_status);
+  const values  = Object.values(stats.by_status);
+  if (!labels.length) return document.getElementById('chart-status').innerHTML = '<p style="color:#8892b0;text-align:center;padding:3rem .5rem">No data yet</p>';
+  Plotly.newPlot('chart-status', [{
+    type: 'pie', labels, values,
+    marker: { colors: COLORS },
+    hole: .45,
+    textinfo: 'label+percent',
+    hovertemplate: '%{label}: %{value}<extra></extra>',
+  }], { ...PLOTLY_LAYOUT, margin: { t: 0, b: 0, l: 0, r: 0 } }, { responsive: true, displayModeBar: false });
+})();
+
+// Auto-refresh every 60s
+setTimeout(() => location.reload(), 60_000);
+</script>
+</body>
+</html>

@@ -15,6 +15,7 @@ dependencies = [
 [project.optional-dependencies]
 ipfs = ["ipfs-http-client>=0.7.0"]
 semantic = ["sentence-transformers>=2.2.0"]
+dashboard = ["flask>=3.0.0"]
 
 [project.scripts]
 ko = "src.__main__:cli"
