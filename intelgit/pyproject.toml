@@ -1,7 +1,23 @@
 [project]
 name = "intelgit"
 version = "0.1.0"
-description = "Git for Intelligence – version-controlled, verifiable knowledge objects"
+description = "Verifiable AI reasoning – cache, sign, and share Knowledge Objects"
+readme = "README.md"
+license = {text = "MIT"}
+keywords = ["ai", "llm", "cache", "knowledge", "agents", "verifiable"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://intelgit-hub.fly.dev"
+Repository = "https://github.com/emodv/l2agent"
+
 requires-python = ">=3.11"
 dependencies = [
     "click>=8.0.0",

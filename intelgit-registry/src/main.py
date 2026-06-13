@@ -298,18 +298,292 @@ async def openapi():
 # ── Web dashboard (HTML) ──────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
+async def landing_page():
+    data = await stats()
+    kos   = recent_kos(limit=6)
+    recent_rows = "".join(
+        f"<tr><td><code style='font-size:.75rem'>{r['id'][:28]}…</code></td>"
+        f"<td>{r['goal'][:55]}</td><td>{r['reuse_count']}</td></tr>"
+        for r in kos
+    ) or "<tr><td colspan=3 style='text-align:center;color:#888'>Be the first to push a KO</td></tr>"
+
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IntelGit – Verifiable AI Reasoning</title>
+  <meta name="description" content="Stop paying twice for the same AI answer. IntelGit caches, signs, and shares verified AI reasoning — cheaper, faster, auditable.">
+  <style>
+    :root {{
+      --bg:#0a0b0f; --surface:#13151f; --border:#1e2235;
+      --accent:#7c6dff; --accent2:#00e5c0;
+      --text:#e2e8f0; --muted:#8892b0;
+    }}
+    *{{box-sizing:border-box;margin:0;padding:0}}
+    body{{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;line-height:1.6}}
+    a{{color:var(--accent);text-decoration:none}} a:hover{{text-decoration:underline}}
+
+    /* NAV */
+    nav{{background:var(--surface);border-bottom:1px solid var(--border);
+         padding:.9rem 2rem;display:flex;align-items:center;gap:1.5rem;position:sticky;top:0;z-index:10}}
+    nav .logo{{font-weight:700;font-size:1.1rem;color:var(--text);letter-spacing:-.3px}}
+    nav .logo span{{color:var(--accent)}}
+    nav .spacer{{flex:1}}
+    nav a{{color:var(--muted);font-size:.875rem}} nav a:hover{{color:var(--text)}}
+    .nav-cta{{background:var(--accent);color:#fff!important;padding:.4rem 1rem;
+              border-radius:8px;font-weight:600}} .nav-cta:hover{{opacity:.9;text-decoration:none!important}}
+
+    /* HERO */
+    .hero{{max-width:900px;margin:5rem auto 3rem;padding:0 2rem;text-align:center}}
+    .hero h1{{font-size:clamp(2.2rem,5vw,3.6rem);font-weight:800;line-height:1.15;
+              letter-spacing:-.03em;margin-bottom:1.25rem}}
+    .hero h1 .hl{{background:linear-gradient(135deg,var(--accent),var(--accent2));
+                  -webkit-background-clip:text;-webkit-text-fill-color:transparent}}
+    .hero p{{font-size:1.15rem;color:var(--muted);max-width:620px;margin:0 auto 2rem}}
+    .hero-btns{{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap}}
+    .btn-primary{{background:var(--accent);color:#fff;padding:.7rem 1.75rem;border-radius:10px;
+                  font-weight:600;font-size:.95rem}} .btn-primary:hover{{opacity:.9;text-decoration:none}}
+    .btn-secondary{{border:1px solid var(--border);color:var(--text);padding:.7rem 1.75rem;
+                    border-radius:10px;font-weight:600;font-size:.95rem;background:var(--surface)}}
+    .btn-secondary:hover{{border-color:var(--accent);text-decoration:none}}
+
+    /* STATS BAR */
+    .stats-bar{{display:flex;justify-content:center;gap:3rem;flex-wrap:wrap;
+                margin:3rem auto;padding:2rem;max-width:860px;
+                background:var(--surface);border:1px solid var(--border);border-radius:16px}}
+    .stat{{text-align:center}}
+    .stat .n{{font-size:2rem;font-weight:700;color:var(--accent2)}}
+    .stat .l{{font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}}
+
+    /* INSTALL */
+    .install{{max-width:640px;margin:0 auto 4rem;padding:0 2rem}}
+    .install-box{{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.25rem 1.5rem;
+                  display:flex;align-items:center;gap:1rem}}
+    .install-box code{{flex:1;font-size:.95rem;color:var(--accent2);font-family:'Fira Code',monospace}}
+    .copy-btn{{background:var(--border);border:none;color:var(--muted);padding:.35rem .75rem;
+               border-radius:6px;cursor:pointer;font-size:.8rem}}
+    .copy-btn:hover{{color:var(--text)}}
+
+    /* PILLARS */
+    .pillars{{max-width:900px;margin:0 auto 5rem;padding:0 2rem}}
+    .pillars h2{{text-align:center;font-size:1.6rem;font-weight:700;margin-bottom:2rem}}
+    .pillars-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1.25rem}}
+    .pillar{{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.75rem}}
+    .pillar .icon{{font-size:1.75rem;margin-bottom:.75rem}}
+    .pillar h3{{font-size:1.05rem;font-weight:700;margin-bottom:.5rem}}
+    .pillar p{{color:var(--muted);font-size:.875rem;line-height:1.6}}
+
+    /* CODE */
+    .code-section{{max-width:900px;margin:0 auto 5rem;padding:0 2rem}}
+    .code-section h2{{text-align:center;font-size:1.6rem;font-weight:700;margin-bottom:2rem}}
+    pre{{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+         padding:1.5rem;overflow-x:auto;font-size:.85rem;line-height:1.7;
+         font-family:'Fira Code','Cascadia Code',monospace}}
+    .cm{{color:#6272a4}} .ck{{color:var(--accent)}} .cs{{color:var(--accent2)}} .cn{{color:#f8f8f2}}
+
+    /* RECENT KOs */
+    .recent{{max-width:900px;margin:0 auto 5rem;padding:0 2rem}}
+    .recent h2{{font-size:1.6rem;font-weight:700;margin-bottom:1.5rem;text-align:center}}
+    table{{width:100%;border-collapse:collapse;font-size:.83rem}}
+    th{{color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;
+        padding:.6rem .75rem;border-bottom:1px solid var(--border);text-align:left}}
+    td{{padding:.6rem .75rem;border-bottom:1px solid rgba(255,255,255,.04)}}
+    tr:hover td{{background:rgba(124,109,255,.05)}}
+    tr:last-child td{{border:none}}
+
+    /* HOW */
+    .how{{max-width:900px;margin:0 auto 5rem;padding:0 2rem;text-align:center}}
+    .how h2{{font-size:1.6rem;font-weight:700;margin-bottom:2rem}}
+    .steps{{display:flex;gap:0;flex-wrap:wrap;justify-content:center}}
+    .step{{flex:1;min-width:160px;max-width:220px;padding:1.25rem}}
+    .step .num{{width:36px;height:36px;border-radius:50%;background:var(--accent);color:#fff;
+                font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto .75rem}}
+    .step h4{{font-size:.9rem;font-weight:600;margin-bottom:.4rem}}
+    .step p{{color:var(--muted);font-size:.8rem}}
+    .step-arrow{{display:flex;align-items:center;color:var(--border);font-size:1.5rem;padding-top:1.5rem}}
+
+    /* CTA */
+    .cta{{text-align:center;padding:4rem 2rem;background:var(--surface);
+          border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin-bottom:3rem}}
+    .cta h2{{font-size:1.8rem;font-weight:700;margin-bottom:.75rem}}
+    .cta p{{color:var(--muted);margin-bottom:1.5rem}}
+
+    /* FOOTER */
+    footer{{text-align:center;padding:2rem;color:var(--muted);font-size:.8rem;border-top:1px solid var(--border)}}
+    footer a{{color:var(--muted)}} footer a:hover{{color:var(--text)}}
+
+    @media(max-width:600px){{
+      .stats-bar{{gap:1.5rem}} .step-arrow{{display:none}}
+    }}
+  </style>
+</head>
+<body>
+
+<nav>
+  <span class="logo">⚡ Intel<span>Git</span></span>
+  <span class="spacer"></span>
+  <a href="/hub">Hub</a>
+  <a href="/leaderboard">Leaderboard</a>
+  <a href="/docs">API Docs</a>
+  <a href="/v1/register" class="nav-cta">Get API Key</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <h1>Your AI agent is paying<br>for the same answer <span class="hl">twice.</span></h1>
+  <p>IntelGit caches, cryptographically signs, and shares verified AI reasoning.
+     Stop re-running LLMs. Start reusing Knowledge Objects.</p>
+  <div class="hero-btns">
+    <a href="#install" class="btn-primary">Install in 30 seconds</a>
+    <a href="/docs" class="btn-secondary">Read the docs</a>
+  </div>
+</section>
+
+<!-- LIVE STATS -->
+<div class="stats-bar">
+  <div class="stat"><div class="n">{data['total_kos']:,}</div><div class="l">Knowledge Objects</div></div>
+  <div class="stat"><div class="n">{data['total_reuses']:,}</div><div class="l">Reuses</div></div>
+  <div class="stat"><div class="n">{data['unique_agents']:,}</div><div class="l">AI Agents</div></div>
+  <div class="stat"><div class="n">${data['total_cost_saved_usd']:.2f}</div><div class="l">Saved in LLM costs</div></div>
+  <div class="stat"><div class="n">{int(data['total_latency_saved_ms']/1000):,}s</div><div class="l">Latency saved</div></div>
+</div>
+
+<!-- INSTALL -->
+<div class="install" id="install">
+  <div class="install-box">
+    <code>pip install intelgit</code>
+    <button class="copy-btn" onclick="navigator.clipboard.writeText('pip install intelgit');this.textContent='Copied!'">Copy</button>
+  </div>
+</div>
+
+<!-- 3 PILLARS -->
+<section class="pillars">
+  <h2>Cheaper. Faster. Auditable.</h2>
+  <div class="pillars-grid">
+    <div class="pillar">
+      <div class="icon">💸</div>
+      <h3>Cheaper</h3>
+      <p>Reusing a cached Knowledge Object costs <strong>$0.000001</strong>.
+         Running the LLM again costs <strong>$0.003–0.03</strong>.
+         At scale, this compounds fast.</p>
+    </div>
+    <div class="pillar">
+      <div class="icon">⚡</div>
+      <h3>Faster</h3>
+      <p>Cache hit returns in <strong>~8ms</strong>. A fresh GPT-4o call
+         takes <strong>800ms–3s</strong>. Your agents stop waiting for answers
+         they've already paid for.</p>
+    </div>
+    <div class="pillar">
+      <div class="icon">🔏</div>
+      <h3>Auditable</h3>
+      <p>Every Knowledge Object is <strong>Ed25519-signed</strong> with a DID key.
+         You can prove what your AI said, which model ran it, and that
+         the output was never changed. Built for compliance.</p>
+    </div>
+  </div>
+</section>
+
+<!-- CODE EXAMPLE -->
+<section class="code-section">
+  <h2>Two lines to never pay twice</h2>
+  <pre><span class="cm"># Wrap any LangChain LLM — no other changes needed</span>
+<span class="ck">from</span> <span class="cn">intelgit</span> <span class="ck">import</span> <span class="cn">KOAgent</span>
+<span class="ck">from</span> <span class="cn">langchain_openai</span> <span class="ck">import</span> <span class="cn">ChatOpenAI</span>
+
+<span class="cn">agent</span> <span class="ck">=</span> <span class="cn">KOAgent</span>(<span class="cn">ChatOpenAI</span>(<span class="cs">model</span><span class="ck">=</span><span class="cs">"gpt-4o-mini"</span>))
+
+<span class="cm"># First call → hits GPT, commits a signed Knowledge Object</span>
+<span class="cn">result</span> <span class="ck">=</span> <span class="cn">agent</span>.<span class="cn">invoke</span>(<span class="cs">"Summarise EU AI Act compliance requirements"</span>)
+
+<span class="cm"># Second call (same or similar goal) → 8ms cache hit, $0.000001</span>
+<span class="cn">result2</span> <span class="ck">=</span> <span class="cn">agent</span>.<span class="cn">invoke</span>(<span class="cs">"Summarise EU AI Act compliance requirements"</span>)
+
+<span class="cn">agent</span>.<span class="cn">print_stats</span>()
+<span class="cm"># Cache hits: 1/2 | Saved: $0.0034 | Saved: 1847ms</span></pre>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="how">
+  <h2>How it works</h2>
+  <div class="steps">
+    <div class="step">
+      <div class="num">1</div>
+      <h4>Run your LLM</h4>
+      <p>IntelGit wraps your existing call — nothing changes in your code</p>
+    </div>
+    <div class="step-arrow">→</div>
+    <div class="step">
+      <div class="num">2</div>
+      <h4>Sign & cache</h4>
+      <p>Output is hashed, signed with your DID key, saved as a Knowledge Object</p>
+    </div>
+    <div class="step-arrow">→</div>
+    <div class="step">
+      <div class="num">3</div>
+      <h4>Reuse or share</h4>
+      <p>Next identical call hits the cache. Push to the registry so others benefit too</p>
+    </div>
+    <div class="step-arrow">→</div>
+    <div class="step">
+      <div class="num">4</div>
+      <h4>Earn micro-royalties</h4>
+      <p>Every time someone reuses your KO, you earn $0.000001 automatically</p>
+    </div>
+  </div>
+</section>
+
+<!-- RECENT KOs -->
+<section class="recent">
+  <h2>Recently published Knowledge Objects</h2>
+  <table>
+    <thead><tr><th>ID</th><th>Goal</th><th>Reuses</th></tr></thead>
+    <tbody>{recent_rows}</tbody>
+  </table>
+  <p style="text-align:center;margin-top:1.25rem">
+    <a href="/hub">Browse all Knowledge Objects →</a>
+  </p>
+</section>
+
+<!-- CTA -->
+<div class="cta">
+  <h2>Start for free. No credit card.</h2>
+  <p>Install locally in seconds. Push to the registry when you're ready.</p>
+  <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">
+    <a href="#install" class="btn-primary">pip install intelgit</a>
+    <a href="/v1/register" class="btn-secondary">Get API key</a>
+  </div>
+</div>
+
+<footer>
+  <p>
+    <a href="/hub">Hub</a> &nbsp;·&nbsp;
+    <a href="/leaderboard">Leaderboard</a> &nbsp;·&nbsp;
+    <a href="/packages">Packages</a> &nbsp;·&nbsp;
+    <a href="/docs">API Docs</a> &nbsp;·&nbsp;
+    <a href="/v1/stats">Stats JSON</a> &nbsp;·&nbsp;
+    <a href="/.well-known/ai-plugin.json">AI Plugin</a>
+  </p>
+  <p style="margin-top:.75rem">IntelGit – Git for Intelligence &nbsp;·&nbsp; Free & open source</p>
+</footer>
+
+</body>
+</html>""")
+
+
+@app.get("/hub", response_class=HTMLResponse)
 async def dashboard_home():
     kos = recent_kos(limit=20)
     rows = "".join(
-        f"<tr><td><a href='/ko/{r['id']}'>{r['id'][:24]}…</a></td>"
-        f"<td>{r['goal'][:60]}</td><td>{r['reuse_count']}</td>"
+        f"<tr><td><a href='/ko/{r['id']}'>{r['id'][:28]}…</a></td>"
+        f"<td>{r['goal'][:65]}</td><td>{r['reuse_count']}</td>"
         f"<td>{r['confidence']:.2f}</td></tr>"
         for r in kos
     )
     return HTMLResponse(_page(
         "IntelGit Hub – Recent KOs",
-        f"""
-        <h2>Recent Knowledge Objects</h2>
+        f"""<h2>Recent Knowledge Objects</h2>
         <table>
           <thead><tr><th>ID</th><th>Goal</th><th>Reuses</th><th>Confidence</th></tr></thead>
           <tbody>{rows or '<tr><td colspan=4>No KOs yet.</td></tr>'}</tbody>
@@ -317,8 +591,7 @@ async def dashboard_home():
         <p style="margin-top:1rem">
           <a href='/leaderboard'>Leaderboard</a> &nbsp;|&nbsp;
           <a href='/packages'>Packages</a>
-        </p>
-        """,
+        </p>""",
     ))
 
 
@@ -444,8 +717,8 @@ def _page(title: str, body: str) -> str:
   </style>
 </head>
 <body>
-  <header><h1><a href="/" style="text-decoration:none">🧠 IntelGit Hub</a></h1>
-  <nav><a href="/v1/search?q=">API</a> | <a href="/docs">OpenAPI</a></nav></header>
+  <header><h1><a href="/" style="text-decoration:none">⚡ IntelGit Hub</a></h1>
+  <nav><a href="/hub">Browse</a> | <a href="/leaderboard">Leaderboard</a> | <a href="/docs">API</a></nav></header>
   <main>{body}</main>
   <footer><small>IntelGit – Git for Intelligence</small></footer>
 </body>
