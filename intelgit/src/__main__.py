@@ -5,6 +5,8 @@ from .cli.checkout import checkout
 from .cli.verify import verify
 from .cli.push import push
 from .cli.install import install
+from .cli.find import find
+from .cli.reuse import reuse
 from .core.store import KOLocalStore
 
 
@@ -30,7 +32,7 @@ def log_cmd(limit: int):
 @click.argument("query")
 @click.option("--top-k", default=5, show_default=True)
 def search_cmd(query: str, top_k: int):
-    """Search knowledge objects by goal text."""
+    """Search knowledge objects by goal text (exact substring match)."""
     store = KOLocalStore()
     results = store.search_by_goal(query, top_k=top_k)
     if not results:
@@ -45,6 +47,8 @@ cli.add_command(checkout)
 cli.add_command(verify)
 cli.add_command(push)
 cli.add_command(install)
+cli.add_command(find)
+cli.add_command(reuse)
 
 
 if __name__ == "__main__":
