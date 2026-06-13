@@ -36,7 +36,7 @@ from pydantic import BaseModel
 
 from .auth import create_user, get_user_by_key, require_auth, optional_auth
 from .db import (
-    init_db, upsert_ko, fetch_ko, search_kos, top_kos, leaderboard,
+    init_db, get_conn, upsert_ko, fetch_ko, search_kos, top_kos, leaderboard,
     recent_kos, save_output, load_output, increment_reuse,
     upsert_package, fetch_package, list_packages,
 )
@@ -234,6 +234,67 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/v1/stats")
+async def stats():
+    """Aggregate registry statistics for the marketing dashboard."""
+    conn = get_conn()
+    total_kos = conn.execute("SELECT COUNT(*) FROM kos").fetchone()[0]
+    total_reuses = conn.execute("SELECT COALESCE(SUM(reuse_count), 0) FROM kos").fetchone()[0]
+    unique_agents = conn.execute("SELECT COUNT(DISTINCT signer_did) FROM kos").fetchone()[0]
+    total_cost_saved = conn.execute(
+        "SELECT COALESCE(SUM(cost_usd * reuse_count), 0) FROM kos"
+    ).fetchone()[0]
+    total_ms_saved = conn.execute(
+        "SELECT COALESCE(SUM(latency_ms * reuse_count), 0) FROM kos"
+    ).fetchone()[0]
+    top_ko = conn.execute(
+        "SELECT id, goal, reuse_count FROM kos ORDER BY reuse_count DESC LIMIT 1"
+    ).fetchone()
+    conn.close()
+
+    return {
+        "total_kos": total_kos,
+        "total_reuses": total_reuses,
+        "unique_agents": unique_agents,
+        "total_cost_saved_usd": round(total_cost_saved, 6),
+        "total_latency_saved_ms": int(total_ms_saved),
+        "top_ko": dict(top_ko) if top_ko else None,
+    }
+
+
+@app.get("/.well-known/ai-plugin.json")
+async def ai_plugin():
+    """OpenAI plugin manifest for agent auto-discovery."""
+    base = os.environ.get("REGISTRY_BASE_URL", "https://hub.intelgit.ai")
+    return {
+        "schema_version": "v1",
+        "name_for_human": "IntelGit Hub",
+        "name_for_model": "intelgit_hub",
+        "description_for_human": "Search and reuse verified AI Knowledge Objects (ko://).",
+        "description_for_model": (
+            "IntelGit Hub stores cryptographically signed AI reasoning steps called "
+            "Knowledge Objects (KOs). Use this plugin to: "
+            "(1) search existing KOs by goal to avoid recomputing, "
+            "(2) push new KOs after running an LLM, "
+            "(3) retrieve the output of a KO by ID. "
+            "Reusing a KO costs ~$0.000001 and ~8ms vs $0.01+ and 800ms for a fresh LLM call."
+        ),
+        "auth": {"type": "none"},
+        "api": {
+            "type": "openapi",
+            "url": f"{base}/openapi.json",
+        },
+        "logo_url": f"{base}/logo.png",
+        "contact_email": "hello@intelgit.ai",
+        "legal_info_url": f"{base}/terms",
+    }
+
+
+@app.get("/openapi.json")
+async def openapi():
+    return app.openapi()
+
+
 # ── Web dashboard (HTML) ──────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
@@ -307,6 +368,31 @@ async def dashboard_leaderboard():
           <tbody>{rows or '<tr><td colspan=4>No contributors yet.</td></tr>'}</tbody>
         </table>
         <p><a href='/'>← Back</a></p>
+        """,
+    ))
+
+
+@app.get("/stats", response_class=HTMLResponse)
+async def dashboard_stats():
+    s = (await stats()).body if hasattr(await stats(), "body") else await stats()
+    # stats() returns a dict directly
+    data = await stats()
+    saved_usd = data["total_cost_saved_usd"]
+    saved_s = data["total_latency_saved_ms"] / 1000
+    top = data.get("top_ko") or {}
+    return HTMLResponse(_page(
+        "IntelGit Hub – Stats",
+        f"""
+        <h2>Registry Stats</h2>
+        <table>
+          <tr><th>Total KOs</th><td><strong>{data['total_kos']}</strong></td></tr>
+          <tr><th>Total Reuses</th><td><strong>{data['total_reuses']}</strong></td></tr>
+          <tr><th>Unique Agents</th><td><strong>{data['unique_agents']}</strong></td></tr>
+          <tr><th>Cost Saved</th><td><strong>${saved_usd:.4f}</strong></td></tr>
+          <tr><th>Latency Saved</th><td><strong>{saved_s:.1f}s</strong></td></tr>
+          <tr><th>Top KO</th><td>{top.get('goal','—')[:60]} ({top.get('reuse_count',0)} reuses)</td></tr>
+        </table>
+        <p style="margin-top:1rem"><a href='/'>← Back</a> | <a href='/v1/stats'>JSON</a></p>
         """,
     ))
 

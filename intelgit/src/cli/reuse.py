@@ -76,7 +76,33 @@ def reuse(ko_id: str, no_verify: bool, quiet: bool):
     click.echo(f"Output: {output}")
     if not no_verify:
         click.echo(f"Verified signature ({ko.proof.signer_did[:32]}…)")
-    click.echo(f"Paid ${REUSE_COST_USD:.6f} to creator  |  latency ~{REUSE_LATENCY_MS}ms")
+    saved_usd = ko.cost_usd - REUSE_COST_USD
+    saved_ms = ko.latency_ms - REUSE_LATENCY_MS
+    click.echo(
+        f"Paid ${REUSE_COST_USD:.6f} to creator  |  "
+        f"latency ~{REUSE_LATENCY_MS}ms  |  "
+        f"saved ${saved_usd:.4f} and {saved_ms}ms vs re-running"
+    )
+
+    # Viral sharing prompt
+    if saved_usd > 0.001:
+        share = click.confirm(
+            f"\nShare this win? (tweet: saved ${saved_usd:.4f} with IntelGit)",
+            default=False,
+        )
+        if share:
+            tweet = (
+                f"My AI agent just saved ${saved_usd:.4f} and {saved_ms}ms "
+                f"reusing a verified knowledge object with @IntelGit. "
+                f"pip install intelgit #AIagents #LLM"
+            )
+            click.echo(f"\nTweet:\n{tweet}")
+            click.echo(f"\nShare at: https://twitter.com/intent/tweet?text={_url_encode(tweet)}")
+
+
+def _url_encode(text: str) -> str:
+    from urllib.parse import quote
+    return quote(text, safe="")
 
 
 def _store_remote_ko(ko_data: dict, store: KOLocalStore):

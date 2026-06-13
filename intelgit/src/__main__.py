@@ -10,6 +10,7 @@ from .cli.reuse import reuse
 from .cli.config_cmd import config_cmd
 from .cli.login import login
 from .cli.status import status, whoami, balance
+from .cli.ambassador import ambassador
 from .core.store import KOLocalStore
 
 
@@ -73,6 +74,7 @@ cli.add_command(login)
 cli.add_command(status)
 cli.add_command(whoami)
 cli.add_command(balance)
+cli.add_command(ambassador)
 
 
 if __name__ == "__main__":
