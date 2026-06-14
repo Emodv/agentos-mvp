@@ -195,7 +195,13 @@ def test_leaderboard_returns_list():
 def test_dashboard_home():
     resp = client.get("/")
     assert resp.status_code == 200
-    assert "IntelGit Hub" in resp.text
+    assert "IntelGit" in resp.text
+
+
+def test_dashboard_hub():
+    resp = client.get("/hub")
+    assert resp.status_code == 200
+    assert "Knowledge Objects" in resp.text
 
 
 def test_ko_not_found():
