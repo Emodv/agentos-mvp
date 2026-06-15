@@ -1,0 +1,68 @@
+name: IntelGit CI
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths: ["intelgit/**", "intelgit-registry/**", "intelgit-langchain/**"]
+  pull_request:
+    paths: ["intelgit/**", "intelgit-registry/**", "intelgit-langchain/**"]
+
+jobs:
+  test-client:
+    name: Client tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.12"]
+    defaults:
+      run:
+        working-directory: intelgit
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e . pytest base58 cryptography click pydantic
+
+      - name: Run tests
+        run: python -m pytest tests/ -v --tb=short
+
+  test-registry:
+    name: Registry tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.12"]
+    defaults:
+      run:
+        working-directory: intelgit-registry
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e . pytest httpx base58 cryptography python-multipart
+
+      - name: Run tests
+        run: python -m pytest tests/ -v --tb=short
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install ruff -q
+      - run: ruff check intelgit/src intelgit-registry/src --select E,W,F --ignore E501 || true
