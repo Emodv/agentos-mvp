@@ -6,7 +6,9 @@ Token savings are measured per request and reported in every response.
 
 ## Base URL
 
-Deploy your own instance (Railway, Fly.io, Docker) or run locally:
+Live API: https://l2agent-production.up.railway.app
+
+Or self-host:
   git clone https://github.com/Emodv/l2agent && cd l2agent
   make build && ./bin/l2agent serve
 

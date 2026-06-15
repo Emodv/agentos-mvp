@@ -2,61 +2,76 @@
 
 **Built for agents, not humans. Stop burning tokens on HTML noise.**
 
-L2Agent fetches web pages and returns only what an agent needs — forms, fields, buttons, links — as compact JSON. Token savings are **measured per request** (raw HTML size vs. JSON output size) and reported honestly in every response, not as a marketing constant.
+L2Agent fetches web pages and returns only what an agent needs — forms, fields, buttons, links — as compact JSON. Token savings are **measured per request** (raw HTML size vs. JSON output size) and reported honestly in every response.
 
-## Quick Start
+**Live API:** `https://l2agent-production.up.railway.app`
+
+## Try It Now (No Setup)
 
 ```bash
-# Build from source
+# Health check
+curl https://l2agent-production.up.railway.app/healthz
+
+# Analyze any URL
+curl "https://l2agent-production.up.railway.app/v1/analyze?url=https://github.com/Emodv/l2agent&agent_id=my-agent"
+
+# Parse raw HTML you already have
+curl -X POST "https://l2agent-production.up.railway.app/v1/analyze?agent_id=my-agent" \
+  --data-binary '<html><body><form action="/signup" method="POST"><input name="email" type="email" required/><button type="submit">Sign Up</button></form></body></html>'
+
+# Check your token savings
+curl "https://l2agent-production.up.railway.app/v1/stats?agent_id=my-agent"
+```
+
+## Quick Start (Self-Hosted)
+
+```bash
 git clone https://github.com/Emodv/l2agent && cd l2agent
 make build
 
-# Start the HTTP API (port 8080, or $PORT)
+# HTTP API on :8080
 ./bin/l2agent serve
 
-# Or run the MCP gateway over stdio (for Claude Desktop / MCP clients)
+# MCP gateway over stdio (Claude Desktop / Cursor / Cline)
 ./bin/l2agent gateway
 ```
 
-No configuration required. If `REDIS_URL` is set, stats and the page cache persist in Redis; otherwise an in-memory store is used automatically.
+No configuration required. `REDIS_URL` is optional for persistent stats.
 
 ## HTTP API
 
-```bash
-# Analyze a page
-curl -H "X-Agent-ID: my-agent" \
-  "http://localhost:8080/v1/analyze?url=https://httpbin.org/forms/post"
-
-# Submit a form
-curl -X POST http://localhost:8080/v1/submit \
-  -H "Content-Type: application/json" \
-  -d '{"url":"https://httpbin.org/post","fields":{"name":"Ada"},"agent_id":"my-agent"}'
-
-# Usage stats (all agents, or ?agent_id=my-agent)
-curl http://localhost:8080/v1/stats
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/healthz` | Liveness probe |
+| `GET` | `/v1/analyze?url=...` | Fetch a URL and return structured JSON |
+| `POST` | `/v1/analyze` | Parse raw HTML body (no outbound fetch) |
+| `POST` | `/v1/submit` | Submit form fields to a URL |
+| `GET` | `/v1/stats[?agent_id=]` | Measured token usage and savings |
 
 Example `/v1/analyze` response:
 
 ```json
 {
-  "url": "https://httpbin.org/forms/post",
-  "title": "Order Form",
+  "url": "https://example.com/signup",
+  "title": "Sign Up - Acme SaaS",
   "forms": [
     {
-      "action": "https://httpbin.org/post",
+      "action": "https://example.com/api/register",
       "method": "POST",
       "fields": [
-        {"name": "custname", "type": "text", "required": true},
-        {"name": "custemail", "type": "email"}
+        {"name": "email",    "type": "email",    "required": true},
+        {"name": "password", "type": "password", "required": true},
+        {"name": "plan",     "type": "select"}
       ]
     }
   ],
+  "links":   [{"text": "Login", "href": "https://example.com/login"}],
+  "buttons": [{"text": "Create Account", "type": "submit"}],
   "meta": {
-    "raw_tokens_est": 612,
-    "optimized_tokens_est": 188,
-    "tokens_saved_est": 424,
-    "savings_pct": 69.3,
+    "raw_tokens_est":       1575,
+    "optimized_tokens_est": 370,
+    "tokens_saved_est":     1205,
+    "savings_pct":          76.5,
     "note": "estimates use ~4 chars/token; raw = original HTML, optimized = this JSON"
   }
 }
@@ -64,16 +79,15 @@ Example `/v1/analyze` response:
 
 ## MCP Gateway
 
-`l2agent gateway` speaks the Model Context Protocol over stdio and exposes three tools:
+`l2agent gateway` speaks the Model Context Protocol over stdio:
 
 | Tool | What it does |
 |------|--------------|
-| `analyze_url` | Fetches and parses a page in-process, returns structured JSON |
+| `analyze_url` | Fetches and parses a page, returns structured JSON |
 | `submit_form` | Submits form-encoded fields to a URL |
-| `get_agent_stats` | Returns measured usage and savings for an agent |
+| `get_agent_stats` | Returns measured token usage and savings |
 
-Claude Desktop config example:
-
+**Claude Desktop** (`~/.claude/claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
@@ -91,41 +105,44 @@ Claude Desktop config example:
 |---------|---------|---------|
 | `PORT` | `8080` | HTTP listen port |
 | `REDIS_URL` | _(unset)_ | Persistent stats + page cache; falls back to in-memory |
-| `L2AGENT_API_KEY` | _(unset)_ | If set, requests must send `X-API-Key` header |
+| `L2AGENT_API_KEY` | _(unset)_ | If set, requests must include `X-API-Key` header |
 
 ## Security
 
-- **SSRF protection:** only `http(s)` URLs; private, loopback, link-local and cloud-metadata addresses are blocked at dial time (resistant to DNS rebinding).
+- **SSRF protection:** only `http(s)` to public IPs; private, loopback, and cloud-metadata addresses blocked at dial time (DNS-rebinding resistant).
 - **Response cap:** at most 5 MB read from any upstream.
 - **Rate limiting:** 60 requests/min per client IP.
-- **API keys** are accepted via header only, never query parameters.
+- **API keys** via header only, never query parameters.
 
 ## Architecture
 
 ```
-cmd/l2agent          single binary: `serve` (HTTP) and `gateway` (MCP stdio)
-internal/analyzer    pure HTML → structured JSON extraction + token accounting
+cmd/l2agent          single binary: `serve` (HTTP) or `gateway` (MCP stdio)
+internal/analyzer    HTML → structured JSON + measured token accounting
 internal/fetch       SSRF-hardened outbound HTTP client
-internal/server      HTTP API, middleware (CORS, auth, rate limit), caching
+internal/server      HTTP API, CORS, auth, rate limiting, 10-min page cache
 internal/mcp         MCP stdio gateway
-internal/store       Redis (or in-memory) stats + page cache
-dashboard/           static dashboard (deployable to Vercel)
+internal/store       Redis or in-memory stats + cache
+dashboard/           static stats dashboard
+openapi.yaml         full OpenAPI 3.1 spec
+llms.txt             machine-readable summary for AI agent discovery
+AGENTS.md            AI agent integration guide
 ```
 
 ## Deployment
 
-- **Railway:** uses the included `Dockerfile` and `railway.toml` (health check on `/healthz`). Add a Redis service and set `REDIS_URL` to its connection string for persistent stats.
-- **Vercel:** serves `dashboard/index.html` as a static site. Open it and point it at your Railway API URL.
+- **Railway:** `Dockerfile` + `railway.toml` included. Health check on `/healthz`. Add a Redis service and set `REDIS_URL` for persistent stats.
+- **Vercel:** `vercel.json` included — serves `dashboard/index.html` as a static site.
 
 ## Development
 
 ```bash
 make test    # unit tests
 make vet     # static analysis
-make build   # binary in ./bin
+make build   # binary → ./bin/l2agent
 make docker  # container image
 ```
 
 ---
 
-**Built for agents, not humans.**
+**Built for agents, not humans.** | [OpenAPI Spec](openapi.yaml) | [Agent Guide](AGENTS.md) | [llms.txt](llms.txt)
