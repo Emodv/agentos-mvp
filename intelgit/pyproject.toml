@@ -5,6 +5,7 @@ description = "Verifiable AI reasoning – cache, sign, and share Knowledge Obje
 readme = "README.md"
 license = {text = "MIT"}
 keywords = ["ai", "llm", "cache", "knowledge", "agents", "verifiable"]
+requires-python = ">=3.11"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -13,12 +14,6 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-
-[project.urls]
-Homepage = "https://intelgit-hub.fly.dev"
-Repository = "https://github.com/emodv/l2agent"
-
-requires-python = ">=3.11"
 dependencies = [
     "click>=8.0.0",
     "pydantic>=2.0.0",
@@ -27,6 +22,10 @@ dependencies = [
     "sqlite-utils>=3.30",
     "openai>=1.0.0",
 ]
+
+[project.urls]
+Homepage = "https://intelgit-hub.fly.dev"
+Repository = "https://github.com/emodv/l2agent"
 
 [project.optional-dependencies]
 ipfs = ["ipfs-http-client>=0.7.0"]
