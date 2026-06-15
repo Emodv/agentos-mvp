@@ -11,7 +11,7 @@ from ..core.store import KOLocalStore
 @click.option("--registry", default=None, help="Override registry URL")
 def push(ko_id: str, push_all: bool, registry: str):
     """Publish one or all local KOs to the IntelGit Hub registry."""
-    url = registry or cfg_get("registry_url") or "https://hub.intelgit.ai"
+    url = registry or cfg_get("registry_url") or "https://l2agent-production.up.railway.app"
     client = RegistryClient(url)
     store = KOLocalStore()
 

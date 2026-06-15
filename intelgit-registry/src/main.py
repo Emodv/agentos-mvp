@@ -265,7 +265,7 @@ async def stats():
 @app.get("/.well-known/ai-plugin.json")
 async def ai_plugin():
     """OpenAI plugin manifest for agent auto-discovery."""
-    base = os.environ.get("REGISTRY_BASE_URL", "https://hub.intelgit.ai")
+    base = os.environ.get("REGISTRY_BASE_URL", "https://l2agent-production.up.railway.app")
     return {
         "schema_version": "v1",
         "name_for_human": "IntelGit Hub",

@@ -5,7 +5,7 @@ from ..core.registry_client import RegistryClient
 
 
 @click.command()
-@click.option("--registry", default="https://hub.intelgit.ai", show_default=True)
+@click.option("--registry", default="https://l2agent-production.up.railway.app", show_default=True)
 @click.option("--api-key", default=None, help="Existing API key (skip registration)")
 @click.option("--name", default="anonymous", help="Display name for new account")
 def login(registry: str, api_key: str, name: str):

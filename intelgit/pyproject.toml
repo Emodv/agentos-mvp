@@ -24,7 +24,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://intelgit-hub.fly.dev"
+Homepage = "https://l2agent-production.up.railway.app"
 Repository = "https://github.com/emodv/l2agent"
 
 [project.optional-dependencies]

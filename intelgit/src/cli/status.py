@@ -15,7 +15,7 @@ def status():
     click.echo(f"Local store:  {len(kos)} KOs  (~/.intelgit/)")
     click.echo(f"DID:          {cfg.get('signer_did') or '(not set – run ko config init-identity)'}")
 
-    url = cfg.get("registry_url") or "https://hub.intelgit.ai"
+    url = cfg.get("registry_url") or "https://l2agent-production.up.railway.app"
     api_key = cfg.get("api_key")
     click.echo(f"\nRegistry:     {url}")
     click.echo(f"Auth:         {'configured' if api_key else 'not configured (run ko login)'}")
@@ -39,7 +39,7 @@ def whoami():
     did = cfg.get("signer_did")
     click.echo(f"DID: {did or '(none – run ko config init-identity)'}")
 
-    url = cfg.get("registry_url") or "https://hub.intelgit.ai"
+    url = cfg.get("registry_url") or "https://l2agent-production.up.railway.app"
     api_key = cfg.get("api_key")
     if not api_key:
         click.echo("Not logged in. Run: ko login")
@@ -66,7 +66,7 @@ def whoami():
 def balance():
     """Show credit balance on the registry."""
     cfg = config.load()
-    url = cfg.get("registry_url") or "https://hub.intelgit.ai"
+    url = cfg.get("registry_url") or "https://l2agent-production.up.railway.app"
     api_key = cfg.get("api_key")
     if not api_key:
         click.echo("Not logged in. Run: ko login")

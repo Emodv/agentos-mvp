@@ -20,7 +20,7 @@ def install(query: str, registry: str, top_k: int, yes: bool):
 
     QUERY can be a goal description (fuzzy) or an exact ko:// ID.
     """
-    url = registry or cfg_get("registry_url") or "https://hub.intelgit.ai"
+    url = registry or cfg_get("registry_url") or "https://l2agent-production.up.railway.app"
     client = RegistryClient(url)
     store = KOLocalStore()
 

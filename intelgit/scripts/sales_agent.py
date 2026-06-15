@@ -78,7 +78,7 @@ ko find "similar query"  # cache hit
 ```
 
 Repo: https://github.com/intelgit/ko
-Registry: https://hub.intelgit.ai
+Registry: https://l2agent-production.up.railway.app
 
 Would you be open to adding this as an optional integration?
 I'm happy to submit a PR with the changes if useful.

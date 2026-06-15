@@ -7,7 +7,7 @@ from typing import Optional
 
 _CONFIG_PATH = Path.home() / ".intelgit" / "config.json"
 _DEFAULTS = {
-    "registry_url": "https://hub.intelgit.ai",
+    "registry_url": "https://l2agent-production.up.railway.app",
     "signer_did": None,
     "private_key_pem": None,
 }

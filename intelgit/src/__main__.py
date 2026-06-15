@@ -51,7 +51,7 @@ def search_cmd(query: str, top_k: int, registry: bool):
     if registry:
         from .core.config import get as cfg_get
         from .core.registry_client import RegistryClient
-        url = cfg_get("registry_url") or "https://hub.intelgit.ai"
+        url = cfg_get("registry_url") or "https://l2agent-production.up.railway.app"
         client = RegistryClient(url)
         remote = client.search(query, top_k=top_k)
         click.echo(f"\nRegistry results ({url}):")
