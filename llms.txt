@@ -1,0 +1,84 @@
+# L2Agent — Structured Web Access for AI Agents
+
+L2Agent is an open-source HTTP + MCP service that fetches web pages and returns
+only what AI agents need — forms, fields, buttons, links — as compact JSON.
+Token savings are measured per request and reported in every response.
+
+## Base URL
+
+Deploy your own instance (Railway, Fly.io, Docker) or run locally:
+  git clone https://github.com/Emodv/l2agent && cd l2agent
+  make build && ./bin/l2agent serve
+
+## Tools (MCP Gateway — stdio)
+
+Run: ./bin/l2agent gateway
+
+- analyze_url(url, agent_id?)       → structured JSON of page (forms, fields, links, token savings)
+- submit_form(url, fields, agent_id?) → submit form fields, returns status + response snippet
+- get_agent_stats(agent_id)         → measured token usage and savings for an agent
+
+## HTTP Endpoints
+
+GET  /healthz
+  Returns: {"status":"ok","store":"memory|redis"}
+
+GET  /v1/analyze?url=<URL>&agent_id=<id>
+  Returns structured JSON: title, forms, fields, links, buttons, meta.token_savings
+
+POST /v1/analyze?url=<optional-base-url>&agent_id=<id>
+  Body: raw HTML text (Content-Type: text/html or text/plain)
+  Returns: same structured JSON as GET — no outbound fetch, parses body directly.
+  Use this when you already have the HTML.
+
+POST /v1/submit
+  Body: {"url":"...","fields":{"key":"val"},"agent_id":"..."}
+  Returns: {"success":true,"status_code":200,"response":"...snippet..."}
+
+GET  /v1/stats?agent_id=<id>
+  Returns measured token usage and savings.
+
+## Response shape (analyze)
+
+{
+  "url": "https://example.com/signup",
+  "title": "Sign Up",
+  "forms": [
+    {
+      "action": "/register",
+      "method": "POST",
+      "fields": [
+        {"name":"email","type":"email","required":true},
+        {"name":"password","type":"password","required":true}
+      ]
+    }
+  ],
+  "links": [{"text":"Login","href":"/login"}],
+  "buttons": [{"text":"Sign Up","type":"submit"}],
+  "meta": {
+    "raw_tokens_est": 850,
+    "optimized_tokens_est": 120,
+    "tokens_saved_est": 730,
+    "savings_pct": 85.9,
+    "note": "estimates use ~4 chars/token"
+  }
+}
+
+## MCP Config (Claude Desktop / Cursor / any MCP client)
+
+{
+  "mcpServers": {
+    "l2agent": {
+      "command": "/path/to/bin/l2agent",
+      "args": ["gateway"]
+    }
+  }
+}
+
+## Auth
+
+No auth in dev mode. Set L2AGENT_API_KEY env var to require X-API-Key header.
+
+## Source
+
+https://github.com/Emodv/l2agent
