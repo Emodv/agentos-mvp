@@ -1,2 +1,0 @@
-[console_scripts]
-intelgit-registry = src.main:start

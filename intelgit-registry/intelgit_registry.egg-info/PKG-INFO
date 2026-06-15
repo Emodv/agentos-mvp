@@ -1,9 +1,0 @@
-Metadata-Version: 2.4
-Name: intelgit-registry
-Version: 0.1.0
-Summary: IntelGit Hub – public registry server for Knowledge Objects
-Requires-Python: >=3.11
-Requires-Dist: fastapi>=0.110.0
-Requires-Dist: uvicorn[standard]>=0.29.0
-Requires-Dist: pydantic>=2.0.0
-Requires-Dist: aiofiles>=23.0.0
