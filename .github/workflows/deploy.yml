@@ -5,17 +5,28 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version: '1.21'
+
       - name: Build
         run: make build
+
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
           name: agentos-binaries
           path: bin/
+
+      - name: Deploy to Railway
+        if: ${{ secrets.RAILWAY_API_TOKEN != '' }}
+        uses: railwayapp/nixpacks-action@v1
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        with:
+          project_id: ${{ secrets.RAILWAY_PROJECT_ID }}

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -88,7 +89,7 @@ func analyzeHandler(w http.ResponseWriter, r *http.Request) {
 	clickables := []Clickable{}
 	doc.Find("button, a.btn, input[type=submit]").Each(func(i int, s *goquery.Selection) {
 		text := strings.TrimSpace(s.Text())
-		selector, _ := goquery.SelectorToCSS(s)
+		selector := fmt.Sprintf("%s:nth-of-type(%d)", goquery.NodeName(s), i+1)
 		typ := "button"
 		if s.Is("a") {
 			typ = "link"
@@ -184,8 +185,20 @@ func min(a, b int) int {
 }
 
 func main() {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"status":"ok","service":"agentos-proxy"}`)
+	})
 	http.HandleFunc("/v1/analyze", analyzeHandler)
 	http.HandleFunc("/v1/submit", submitHandler)
-	println("Proxy listening on :8080")
-	http.ListenAndServe(":8080", nil)
+	addr := ":" + port
+	println("Proxy listening on " + addr)
+	if err := http.ListenAndServe(addr, nil); err != nil {
+		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
+		os.Exit(1)
+	}
 }
