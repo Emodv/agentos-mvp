@@ -1,0 +1,344 @@
+openapi: "3.1.0"
+info:
+  title: L2Agent API
+  description: |
+    Structured web access for AI agents. Fetches web pages and returns only
+    what agents need — forms, fields, buttons, links — as compact JSON.
+    Token savings are measured per request.
+  version: "1.0.0"
+  license:
+    name: MIT
+  contact:
+    url: https://github.com/Emodv/l2agent
+
+servers:
+  - url: http://localhost:8080
+    description: Local dev
+
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      operationId: healthCheck
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  store:
+                    type: string
+                    example: memory
+
+  /v1/analyze:
+    get:
+      summary: Analyze a URL
+      description: |
+        Fetches the URL and returns its structure (forms, fields, buttons, links)
+        as compact JSON. Measured token savings are included in the `meta` block.
+      operationId: analyzeURL
+      parameters:
+        - name: url
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: The URL to fetch and analyze
+        - name: agent_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional agent identifier for usage tracking
+      security:
+        - apiKey: []
+      responses:
+        "200":
+          description: Structured page analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyzedPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
+    post:
+      summary: Parse raw HTML
+      description: |
+        Accepts raw HTML in the request body and parses it in-process — no
+        outbound network fetch. Use this when you already have the HTML
+        (e.g. from a browser extension or another fetch layer).
+      operationId: analyzeHTML
+      parameters:
+        - name: url
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uri
+          description: Optional base URL for resolving relative links
+        - name: agent_id
+          in: query
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          text/html:
+            schema:
+              type: string
+          text/plain:
+            schema:
+              type: string
+      security:
+        - apiKey: []
+      responses:
+        "200":
+          description: Structured page analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyzedPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/submit:
+    post:
+      summary: Submit a form
+      description: Submits form-encoded fields to a URL and returns the result.
+      operationId: submitForm
+      security:
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, fields]
+              properties:
+                url:
+                  type: string
+                  format: uri
+                fields:
+                  type: object
+                  additionalProperties:
+                    type: string
+                  description: Form field name → value pairs
+                agent_id:
+                  type: string
+      responses:
+        "200":
+          description: Submit result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  status_code:
+                    type: integer
+                  agent_id:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+                  response:
+                    type: string
+                    description: First 500 chars of the upstream response body
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/stats:
+    get:
+      summary: Get usage stats
+      description: |
+        Returns measured token usage and savings.
+        Pass `?agent_id=` to get stats for a single agent; omit for all agents.
+      operationId: getStats
+      parameters:
+        - name: agent_id
+          in: query
+          required: false
+          schema:
+            type: string
+      security:
+        - apiKey: []
+      responses:
+        "200":
+          description: Agent stats
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/AgentStats"
+                  - type: object
+                    properties:
+                      agents:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AgentStats"
+                      count:
+                        type: integer
+
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Required only when L2AGENT_API_KEY env var is set on the server.
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Destination address blocked (SSRF protection)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: Rate limit exceeded (60 req/min per IP)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    BadGateway:
+      description: Upstream fetch failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+    Field:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          example: email
+        required:
+          type: boolean
+        placeholder:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+          description: Select/radio options, if any
+
+    Form:
+      type: object
+      properties:
+        action:
+          type: string
+        method:
+          type: string
+          example: POST
+        fields:
+          type: array
+          items:
+            $ref: "#/components/schemas/Field"
+
+    Link:
+      type: object
+      properties:
+        text:
+          type: string
+        href:
+          type: string
+
+    Button:
+      type: object
+      properties:
+        text:
+          type: string
+        type:
+          type: string
+
+    TokenMeta:
+      type: object
+      properties:
+        raw_tokens_est:
+          type: integer
+          description: Estimated tokens in the original HTML
+        optimized_tokens_est:
+          type: integer
+          description: Estimated tokens in the JSON output
+        tokens_saved_est:
+          type: integer
+        savings_pct:
+          type: number
+          format: float
+        note:
+          type: string
+
+    AnalyzedPage:
+      type: object
+      properties:
+        url:
+          type: string
+        title:
+          type: string
+        forms:
+          type: array
+          items:
+            $ref: "#/components/schemas/Form"
+        links:
+          type: array
+          items:
+            $ref: "#/components/schemas/Link"
+        buttons:
+          type: array
+          items:
+            $ref: "#/components/schemas/Button"
+        meta:
+          $ref: "#/components/schemas/TokenMeta"
+
+    AgentStats:
+      type: object
+      properties:
+        agent_id:
+          type: string
+        total_requests:
+          type: integer
+        raw_tokens_total:
+          type: integer
+        optimized_tokens_total:
+          type: integer
+        tokens_saved_total:
+          type: integer
+        last_seen:
+          type: string
+          format: date-time

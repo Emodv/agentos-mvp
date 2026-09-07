@@ -1,7 +1,8 @@
 // Package server exposes the L2Agent HTTP API:
 //
 //	GET  /healthz              – liveness probe
-//	GET  /v1/analyze?url=...   – structured page extraction
+//	GET  /v1/analyze?url=...   – fetch URL and return structured JSON
+//	POST /v1/analyze           – parse raw HTML body and return structured JSON
 //	POST /v1/submit            – form submission
 //	GET  /v1/stats[?agent_id=] – usage stats (all agents or one)
 package server
@@ -14,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -54,6 +56,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("GET /v1/analyze", s.protect(s.handleAnalyze))
+	mux.HandleFunc("POST /v1/analyze", s.protect(s.handleAnalyzeHTML))
 	mux.HandleFunc("POST /v1/submit", s.protect(s.handleSubmit))
 	mux.HandleFunc("GET /v1/stats", s.protect(s.handleStats))
 	// Back-compat with the original /scrape contract.
@@ -208,6 +211,45 @@ func (s *Server) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 		writeFetchError(w, err)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(out)
+}
+
+// handleAnalyzeHTML accepts raw HTML in the request body and parses it
+// in-process — no outbound network fetch is performed. This is useful
+// when the caller already holds the HTML (e.g. from a browser extension
+// or another fetch layer) and just wants structured extraction.
+func (s *Server) handleAnalyzeHTML(w http.ResponseWriter, r *http.Request) {
+	pageURL := r.URL.Query().Get("url") // optional: used for resolving relative links
+	agentID := agentIDFrom(r, r.URL.Query().Get("agent_id"))
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, fetch.MaxBodyBytes))
+	if err != nil || len(body) == 0 {
+		writeError(w, http.StatusBadRequest, "request body must contain HTML")
+		return
+	}
+
+	html := string(body)
+	page, err := analyzer.Analyze(strings.NewReader(html), pageURL)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "parse failed: "+err.Error())
+		return
+	}
+
+	draft, _ := json.Marshal(page)
+	page.FillMeta(html, string(draft))
+	out, err := json.Marshal(page)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "marshal failed")
+		return
+	}
+
+	if agentID != "" {
+		if err := s.store.RecordRequest(agentID, page.Meta.RawTokens, page.Meta.OptimizedTokens); err != nil {
+			log.Printf("stats record failed for agent=%s: %v", agentID, err)
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(out)
 }

@@ -1,66 +1,168 @@
-# L2Agent – Agent Integration Guide
+# L2Agent — AI Agent Integration Guide
 
-## What is L2Agent?
+## What L2Agent Does
 
-A structured-web-access layer for AI agents. Instead of parsing raw
-HTML, agents get compact JSON describing a page's forms, fields,
-buttons and links. Token savings are **measured per request** (raw HTML
-size vs. JSON output, ~4 chars/token estimate) and included in every
-response under `meta` — no hardcoded marketing numbers.
+L2Agent converts web pages into compact, agent-readable JSON.
+Instead of burning 500–1000 tokens parsing raw HTML, an agent gets
+back only the structured data it needs: forms, fields, links, buttons.
+Token savings are measured per request and returned in every response.
 
-## Quick Start
+Typical savings: **70–90%** fewer tokens per web interaction.
+
+---
+
+## Two Ways to Use It
+
+### 1. HTTP API (for any agent or language)
 
 ```bash
-make build
-
-# HTTP API on :8080 (or $PORT)
-./bin/l2agent serve
-
-# MCP gateway over stdio
-./bin/l2agent gateway
+# Start the server
+./bin/l2agent serve   # listens on :8080 (or $PORT)
 ```
 
-## MCP Tools
+**Analyze a URL:**
+```bash
+curl "http://localhost:8080/v1/analyze?url=https://example.com/signup&agent_id=my-agent"
+```
 
-### 1. analyze_url
-Fetches and parses the page in-process; returns structured JSON.
+**Parse HTML you already have (no outbound fetch):**
+```bash
+curl -X POST "http://localhost:8080/v1/analyze?agent_id=my-agent" \
+  --data-binary @page.html
+```
+
+**Submit a form:**
+```bash
+curl -X POST http://localhost:8080/v1/submit \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/signup","fields":{"email":"bot@example.com"},"agent_id":"my-agent"}'
+```
+
+**Check your savings:**
+```bash
+curl "http://localhost:8080/v1/stats?agent_id=my-agent"
+```
+
+---
+
+### 2. MCP Gateway (for Claude Desktop, Cursor, Cline, and any MCP client)
+
+```bash
+./bin/l2agent gateway   # speaks MCP over stdio
+```
+
+**Claude Desktop config** (`~/.claude/claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "l2agent": {
+      "command": "/path/to/bin/l2agent",
+      "args": ["gateway"]
+    }
+  }
+}
+```
+
+**Available MCP tools:**
+
+| Tool | Input | Output |
+|------|-------|--------|
+| `analyze_url` | `url` (required), `agent_id` (optional) | Structured JSON of page |
+| `submit_form` | `url`, `fields` (object), `agent_id` (optional) | Submit result + status |
+| `get_agent_stats` | `agent_id` | Measured token savings |
+
+---
+
+## Response Format
+
+Every analyze call returns this shape:
 
 ```json
-{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"analyze_url","arguments":{"url":"https://httpbin.org/forms/post","agent_id":"my-agent-001"}}}
+{
+  "url": "https://example.com/signup",
+  "title": "Create Account",
+  "forms": [
+    {
+      "action": "/register",
+      "method": "POST",
+      "fields": [
+        {"name": "email",    "type": "email",    "required": true},
+        {"name": "password", "type": "password", "required": true},
+        {"name": "plan",     "type": "select",   "options": ["free","pro"]}
+      ]
+    }
+  ],
+  "links":   [{"text": "Login",  "href": "/login"}],
+  "buttons": [{"text": "Sign Up","type": "submit"}],
+  "meta": {
+    "raw_tokens_est":       850,
+    "optimized_tokens_est": 120,
+    "tokens_saved_est":     730,
+    "savings_pct":          85.9,
+    "note": "estimates use ~4 chars/token; raw = original HTML, optimized = this JSON"
+  }
+}
 ```
 
-### 2. submit_form
-Submits form-encoded fields and returns the result status.
+---
 
-```json
-{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"submit_form","arguments":{"url":"https://httpbin.org/post","fields":{"name":"John Doe","email":"john@example.com"},"agent_id":"my-agent-001"}}}
+## Quick Build
+
+```bash
+git clone https://github.com/Emodv/l2agent
+cd l2agent
+make build          # produces ./bin/l2agent
+./bin/l2agent serve # HTTP on :8080
 ```
 
-### 3. get_agent_stats
-Returns measured usage and savings for an agent.
+No external dependencies required. Redis is optional (for persistent stats).
 
-```json
-{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_agent_stats","arguments":{"agent_id":"my-agent-001"}}}
-```
+---
+
+## Security Properties
+
+- SSRF protection: only public IPs allowed; checked after DNS resolution
+- Private/loopback/cloud-metadata addresses blocked
+- Response capped at 5 MB
+- Rate limit: 60 requests/min per client IP
+- API key via `X-API-Key` header (only when `L2AGENT_API_KEY` env var is set)
+
+---
 
 ## HTTP Endpoints
 
 ```
 GET  /healthz
-GET  /v1/analyze?url=YOUR_URL        (identify with X-Agent-ID header)
-POST /v1/submit                      {"url":..., "fields":{...}, "agent_id":...}
-GET  /v1/stats[?agent_id=...]
-POST /scrape                         legacy alias for analyze
+GET  /v1/analyze?url=YOUR_URL            fetch and parse a remote page
+POST /v1/analyze?url=OPTIONAL_BASE_URL   parse raw HTML from request body
+POST /v1/submit                          submit form fields to a URL
+GET  /v1/stats[?agent_id=...]            usage and savings stats
+POST /scrape                             legacy alias for GET /v1/analyze
 ```
 
-## Auth & Limits
-
-- Set `L2AGENT_API_KEY` to require the `X-API-Key` header. No key = open dev mode.
-- 60 requests/min per client IP.
-- Only public `http(s)` destinations are fetched (SSRF guard); responses capped at 5 MB.
-
-## Test
+## MCP Protocol
 
 ```bash
-./test_agent.sh
+# Initialize
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{}}}' | ./bin/l2agent gateway
+
+# List tools
+echo '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | ./bin/l2agent gateway
+
+# Call analyze_url
+echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"analyze_url","arguments":{"url":"https://example.com","agent_id":"my-agent"}}}' | ./bin/l2agent gateway
 ```
+
+---
+
+## OpenAPI Spec
+
+Full spec: `openapi.yaml` in this repository.
+Machine-readable summary: `llms.txt` in this repository.
+
+---
+
+## Source
+
+https://github.com/Emodv/l2agent
+Author: Emodv
